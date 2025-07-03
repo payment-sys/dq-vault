@@ -13,7 +13,8 @@ import (
 )
 
 // pathPassphrase corresponds to POST gen/passphrase.
-func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
+func (b *Backend) pathRegister(ctx context.Context, req *logical.Request,
+	d *framework.FieldData) (*logical.Response, error) {
 	var err error
 	backendLogger := b.logger.With(slog.String("op", "path_register"))
 	if err = helpers.ValidateFields(req, d); err != nil {
@@ -79,7 +80,6 @@ func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *fra
 
 	backendLogger.Info("user registered", "username", username)
 
-	// return response
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"uuid": uuid,

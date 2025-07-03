@@ -20,11 +20,11 @@ import (
 
 // Test constants for register tests
 const (
-	regTestUsername = "test-user"
-	regTestValidMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	regTestUsername        = "test-user"
+	regTestValidMnemonic   = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
 	regTestInvalidMnemonic = "invalid mnemonic words that do not form valid bip39"
-	regTestPassphrase = "test-passphrase"
-	regTestGeneratedUUID = "generated-uuid-123"
+	regTestPassphrase      = "test-passphrase"
+	regTestGeneratedUUID   = "generated-uuid-123"
 )
 
 // MockStorage implements logical.Storage for testing (reusing from path_address_test.go)
@@ -71,7 +71,7 @@ func createRegisterFieldData(data map[string]interface{}) *framework.FieldData {
 			Description: "Passphrase for mnemonic",
 		},
 	}
-	
+
 	return &framework.FieldData{
 		Raw:    data,
 		Schema: schema,
@@ -79,22 +79,22 @@ func createRegisterFieldData(data map[string]interface{}) *framework.FieldData {
 }
 
 // Helper function to create test backend for register tests
-func createRegisterTestBackend(t *testing.T) *backend {
+func createRegisterTestBackend(_ *testing.T) *Backend {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	return &backend{
+	return &Backend{
 		logger: logger,
 	}
 }
 
 // Mock functions for external dependencies
-func mockUUIDExists(returnValue bool) {
+func mockUUIDExists(_ bool) {
 	// This would normally mock helpers.UUIDExists, but since it's called directly,
 	// we'll handle it in the storage mock expectations
 }
 
 func TestBackend_PathRegister(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name           string
 		fieldData      map[string]interface{}
@@ -148,8 +148,8 @@ func TestBackend_PathRegister(t *testing.T) {
 		{
 			name: "successful registration with no passphrase",
 			fieldData: map[string]interface{}{
-				"username": regTestUsername,
-				"mnemonic": regTestValidMnemonic,
+				"username":   regTestUsername,
+				"mnemonic":   regTestValidMnemonic,
 				"passphrase": "",
 			},
 			setupStorage: func(ms *MockStorageRegister) {
@@ -280,24 +280,24 @@ func TestBackend_PathRegister(t *testing.T) {
 			// Setup
 			mockStorage := new(MockStorageRegister)
 			backend := createRegisterTestBackend(t)
-			
+
 			// Setup storage expectations
 			if tt.setupStorage != nil {
 				tt.setupStorage(mockStorage)
 			}
-			
+
 			// Setup field data
 			fieldData := createRegisterFieldData(tt.fieldData)
-			
+
 			// Create request with mock storage
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data:    tt.fieldData,
 			}
-			
+
 			// Execute
 			got, err := backend.pathRegister(ctx, req, fieldData)
-			
+
 			// Assert error expectations
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -312,7 +312,7 @@ func TestBackend_PathRegister(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, got)
-				
+
 				// Assert response structure
 				if tt.want != nil {
 					assert.NotNil(t, got.Data)
@@ -324,7 +324,7 @@ func TestBackend_PathRegister(t *testing.T) {
 					assert.NotEmpty(t, uuid)
 				}
 			}
-			
+
 			// Verify all mock expectations were met
 			mockStorage.AssertExpectations(t)
 		})
@@ -333,39 +333,39 @@ func TestBackend_PathRegister(t *testing.T) {
 
 func TestBackend_PathRegister_MnemonicGeneration(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
-		name         string
+		name             string
 		providedMnemonic string
 		expectGenerated  bool
 	}{
 		{
-			name:            "use provided valid mnemonic",
+			name:             "use provided valid mnemonic",
 			providedMnemonic: regTestValidMnemonic,
 			expectGenerated:  false,
 		},
 		{
-			name:            "generate mnemonic when empty",
+			name:             "generate mnemonic when empty",
 			providedMnemonic: "",
 			expectGenerated:  true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockStorage := new(MockStorageRegister)
 			backend := createRegisterTestBackend(t)
-			
+
 			// Setup storage expectations
 			mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{}, nil)
 			mockStorage.On("Put", ctx, mock.AnythingOfType("*logical.StorageEntry")).Return(nil)
-			
+
 			fieldData := createRegisterFieldData(map[string]interface{}{
 				"username":   regTestUsername,
 				"mnemonic":   tt.providedMnemonic,
 				"passphrase": regTestPassphrase,
 			})
-			
+
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data: map[string]interface{}{
@@ -374,13 +374,13 @@ func TestBackend_PathRegister_MnemonicGeneration(t *testing.T) {
 					"passphrase": regTestPassphrase,
 				},
 			}
-			
+
 			got, err := backend.pathRegister(ctx, req, fieldData)
-			
+
 			assert.NoError(t, err)
 			assert.NotNil(t, got)
 			assert.Contains(t, got.Data, "uuid")
-			
+
 			mockStorage.AssertExpectations(t)
 		})
 	}
@@ -390,20 +390,20 @@ func TestBackend_PathRegister_StorageContent(t *testing.T) {
 	ctx := context.Background()
 	mockStorage := new(MockStorageRegister)
 	backend := createRegisterTestBackend(t)
-	
+
 	// Capture the storage entry to verify its content
 	var capturedEntry *logical.StorageEntry
 	mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{}, nil)
 	mockStorage.On("Put", ctx, mock.AnythingOfType("*logical.StorageEntry")).Run(func(args mock.Arguments) {
 		capturedEntry = args.Get(1).(*logical.StorageEntry)
 	}).Return(nil)
-	
+
 	fieldData := createRegisterFieldData(map[string]interface{}{
 		"username":   regTestUsername,
 		"mnemonic":   regTestValidMnemonic,
 		"passphrase": regTestPassphrase,
 	})
-	
+
 	req := &logical.Request{
 		Storage: mockStorage,
 		Data: map[string]interface{}{
@@ -412,36 +412,36 @@ func TestBackend_PathRegister_StorageContent(t *testing.T) {
 			"passphrase": regTestPassphrase,
 		},
 	}
-	
+
 	got, err := backend.pathRegister(ctx, req, fieldData)
-	
+
 	assert.NoError(t, err)
 	assert.NotNil(t, got)
-	
+
 	// Verify storage content
 	require.NotNil(t, capturedEntry)
-	
+
 	var storedUser helpers.User
 	err = json.Unmarshal(capturedEntry.Value, &storedUser)
 	require.NoError(t, err)
-	
+
 	assert.Equal(t, regTestUsername, storedUser.Username)
 	assert.Equal(t, regTestValidMnemonic, storedUser.Mnemonic)
 	assert.Equal(t, regTestPassphrase, storedUser.Passphrase)
 	assert.NotEmpty(t, storedUser.UUID)
-	assert.True(t, len(storedUser.UUID) > 0)
-	
+	assert.True(t, storedUser.UUID != "")
+
 	// Verify storage path
 	expectedPath := config.StorageBasePath + storedUser.UUID
 	assert.Equal(t, expectedPath, capturedEntry.Key)
-	
+
 	mockStorage.AssertExpectations(t)
 }
 
 func TestBackend_PathRegister_EdgeCases(t *testing.T) {
 	ctx := context.Background()
 	backend := createRegisterTestBackend(t)
-	
+
 	t.Run("nil context", func(t *testing.T) {
 		mockStorage := new(MockStorageRegister)
 		data := map[string]interface{}{
@@ -450,74 +450,74 @@ func TestBackend_PathRegister_EdgeCases(t *testing.T) {
 			"passphrase": regTestPassphrase,
 		}
 		fieldData := createRegisterFieldData(data)
-		
+
 		// Mock with nil context using mock.Anything
 		mockStorage.On("List", mock.Anything, config.StorageBasePath).Return([]string{}, nil)
 		mockStorage.On("Put", mock.Anything, mock.AnythingOfType("*logical.StorageEntry")).Return(nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, err := backend.pathRegister(nil, req, fieldData)
 		assert.NoError(t, err) // Function actually succeeds with nil context
-		
+
 		mockStorage.AssertExpectations(t)
 	})
-	
+
 	t.Run("very long username", func(t *testing.T) {
 		mockStorage := new(MockStorageRegister)
 		longUsername := string(make([]byte, 1000)) // Very long username
 		for i := range longUsername {
 			longUsername = longUsername[:i] + "a" + longUsername[i+1:]
 		}
-		
+
 		data := map[string]interface{}{
 			"username":   longUsername,
 			"mnemonic":   regTestValidMnemonic,
 			"passphrase": regTestPassphrase,
 		}
 		fieldData := createRegisterFieldData(data)
-		
+
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{}, nil)
 		mockStorage.On("Put", ctx, mock.AnythingOfType("*logical.StorageEntry")).Return(nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		got, err := backend.pathRegister(ctx, req, fieldData)
 		assert.NoError(t, err)
 		assert.NotNil(t, got)
-		
+
 		mockStorage.AssertExpectations(t)
 	})
-	
+
 	t.Run("unicode username", func(t *testing.T) {
 		mockStorage := new(MockStorageRegister)
 		unicodeUsername := "用户名测试🔐"
-		
+
 		data := map[string]interface{}{
 			"username":   unicodeUsername,
 			"mnemonic":   regTestValidMnemonic,
 			"passphrase": regTestPassphrase,
 		}
 		fieldData := createRegisterFieldData(data)
-		
+
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{}, nil)
 		mockStorage.On("Put", ctx, mock.AnythingOfType("*logical.StorageEntry")).Return(nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		got, err := backend.pathRegister(ctx, req, fieldData)
 		assert.NoError(t, err)
 		assert.NotNil(t, got)
-		
+
 		mockStorage.AssertExpectations(t)
 	})
 }
@@ -526,24 +526,24 @@ func TestBackend_PathRegister_EdgeCases(t *testing.T) {
 func BenchmarkBackend_PathRegister(b *testing.B) {
 	ctx := context.Background()
 	backend := createRegisterTestBackend(&testing.T{})
-	
+
 	for i := 0; i < b.N; i++ {
 		mockStorage := new(MockStorageRegister)
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{}, nil)
 		mockStorage.On("Put", ctx, mock.AnythingOfType("*logical.StorageEntry")).Return(nil)
-		
+
 		data := map[string]interface{}{
 			"username":   regTestUsername,
 			"mnemonic":   regTestValidMnemonic,
 			"passphrase": regTestPassphrase,
 		}
 		fieldData := createRegisterFieldData(data)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, _ = backend.pathRegister(ctx, req, fieldData)
 	}
 }

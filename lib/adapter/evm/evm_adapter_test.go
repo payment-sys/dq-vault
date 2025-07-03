@@ -446,7 +446,7 @@ func TestEthereumAdapter_CreateSignedTransaction(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotEmpty(t, got)
-				assert.True(t, len(got) > 0)
+				assert.True(t, got != "")
 				if len(got) >= 2 {
 					assert.True(t, got[:2] == "0x") // Signed transactions start with 0x
 				}

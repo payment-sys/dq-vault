@@ -14,7 +14,8 @@ import (
 	"github.com/payment-system/dq-vault/lib/slip44"
 )
 
-func (b *backend) pathAddress(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
+func (b *Backend) pathAddress(ctx context.Context, req *logical.Request,
+	d *framework.FieldData) (*logical.Response, error) {
 	backendLogger := b.logger.With(slog.String("op", "path_address"))
 	if err := helpers.ValidateFields(req, d); err != nil {
 		backendLogger.Error("validate fields", "error", err)
@@ -66,13 +67,13 @@ func (b *backend) pathAddress(ctx context.Context, req *logical.Request, d *fram
 	backendLogger.Info("dp", "dp", derivationPath)
 
 	// obtains blockchain adapater based on coinType
-	adapter := adapter.GetInventory(backendLogger)
+	adapterInventory := adapter.GetInventory(backendLogger)
 	if err != nil {
 		backendLogger.Error("get adapter", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	address, err := adapter.DeriveAddress(seed, uint16(coinType), derivationPath, isDev)
+	address, err := adapterInventory.DeriveAddress(seed, uint16(coinType), derivationPath, isDev)
 	if err != nil {
 		backendLogger.Error("derive address", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
@@ -81,7 +82,7 @@ func (b *backend) pathAddress(ctx context.Context, req *logical.Request, d *fram
 	// Returns publicKey and address as output
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"address":   address,
+			"address": address,
 		},
 	}, nil
 }

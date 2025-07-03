@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/ecdsa"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"log/slog"
 	"math/big"
@@ -20,11 +19,15 @@ import (
 	"github.com/payment-system/dq-vault/lib/slip44"
 )
 
+const (
+	// maskingLength is the number of characters to show at the end of masked keys
+	maskingLength = 4
+)
 
 type EthereumAdapter struct {
-	logger *slog.Logger
+	logger             *slog.Logger
 	availableCoinTypes []uint16
-	zeroAddress string
+	zeroAddress        string
 }
 
 func NewEthereumAdapter(logger *slog.Logger) *EthereumAdapter {
@@ -59,7 +62,7 @@ func (e *EthereumAdapter) DerivePrivateKey(seed []byte, derivationPath string, i
 	privateKey := crypto.FromECDSA(btcecPrivateKey.ToECDSA())
 	privateKeyStr := hexutil.Encode(privateKey)[2:]
 
-	maskedKey := strings.Repeat("*", len(privateKeyStr)-4) + privateKeyStr[len(privateKeyStr)-4:]
+	maskedKey := strings.Repeat("*", len(privateKeyStr)-maskingLength) + privateKeyStr[len(privateKeyStr)-maskingLength:]
 	logger.Info("Private key derived successfully", "privateKey", maskedKey)
 
 	return privateKeyStr, nil
@@ -87,7 +90,7 @@ func (e *EthereumAdapter) DerivePublicKey(seed []byte, derivationPath string, is
 	publicKeyBytes := crypto.CompressPubkey(publicKeyECDSA)
 	publicKeyStr := hexutil.Encode(publicKeyBytes)[2:]
 
-	maskedKey := strings.Repeat("*", len(publicKeyStr)-4) + publicKeyStr[len(publicKeyStr)-4:]
+	maskedKey := strings.Repeat("*", len(publicKeyStr)-maskingLength) + publicKeyStr[len(publicKeyStr)-maskingLength:]
 	logger.Info("Public key derived successfully", "publicKey", maskedKey)
 
 	return publicKeyStr, nil
@@ -119,7 +122,7 @@ func (e *EthereumAdapter) DeriveAddress(seed []byte, derivationPath string, isDe
 	return address, nil
 }
 
-func validatePayload(payload lib.EthereumRawTx, zeroAddress string) (bool, string) {
+func validatePayload(payload lib.EthereumRawTx, zeroAddress string) (isValid bool, txType string) {
 	// Value, chainId, GasPrice should not be negative
 	if payload.ChainID.Cmp(big.NewInt(0)) == -1 ||
 		payload.Value.Cmp(big.NewInt(0)) == -1 ||
@@ -154,15 +157,13 @@ func (e *EthereumAdapter) createRawTransaction(payloadString string) (*types.Tra
 	var payload lib.EthereumRawTx
 	if err := json.Unmarshal([]byte(payloadString), &payload); err != nil ||
 		reflect.DeepEqual(payload, lib.EthereumRawTx{}) {
-		errorMsg := fmt.Sprintf("Unable to decode payload=[%v]", payloadString)
-
-		return nil, nil, errors.New(errorMsg)
+		return nil, nil, fmt.Errorf("unable to decode payload=[%v]: %w", payloadString, err)
 	}
 
 	// validate payload data
 	valid, txType := validatePayload(payload, e.zeroAddress)
 	if !valid {
-		return nil, nil, errors.New("Invalid payload data")
+		return nil, nil, ErrInvalidPayloadData
 	}
 
 	logger.Info("validate payload", "txType", txType)
@@ -173,11 +174,11 @@ func (e *EthereumAdapter) createRawTransaction(payloadString string) (*types.Tra
 		payload.Value,
 		payload.GasLimit,
 		payload.GasPrice,
-		common.FromHex(string(payload.Data)),
+		common.FromHex(payload.Data),
 	), payload.ChainID, nil
 }
 
-func (e *EthereumAdapter) CreateSignedTransaction(seed []byte, derivationPath string, payload string) (string, error) {
+func (e *EthereumAdapter) CreateSignedTransaction(seed []byte, derivationPath, payload string) (string, error) {
 	logger := e.logger.With(slog.String("op", "create_signed_transaction"), slog.String("derivationPath", derivationPath))
 	logger.Info("Creating signed transaction")
 
@@ -192,14 +193,14 @@ func (e *EthereumAdapter) CreateSignedTransaction(seed []byte, derivationPath st
 		return "", err
 	}
 
-	rawTx, chainId, err := e.createRawTransaction(payload)
+	rawTx, chainID, err := e.createRawTransaction(payload)
 	if err != nil {
 		logger.Error("Failed to create raw transaction", "error", err)
 		return "", err
 	}
 
 	// sign raw transaction using raw transaction + chainId + private key
-	signedTx, err := types.SignTx(rawTx, types.NewEIP155Signer(chainId), privateKey)
+	signedTx, err := types.SignTx(rawTx, types.NewEIP155Signer(chainID), privateKey)
 	if err != nil {
 		return "", err
 	}

@@ -12,6 +12,14 @@ import (
 	"github.com/rs/xid"
 )
 
+// Static error variables to avoid dynamic error creation
+var (
+	ErrInvalidUUID      = errors.New("provide a valid UUID")
+	ErrInvalidPath      = errors.New("provide a valid path")
+	ErrUUIDDoesNotExist = errors.New("UUID does not exists")
+	ErrUnknownFields    = errors.New("unknown fields provided")
+)
+
 // User -- stores data related to user
 type User struct {
 	Username   string `json:"username"`
@@ -45,6 +53,11 @@ func ValidateFields(req *logical.Request, data *framework.FieldData) error {
 		}
 	}
 
+	// Fix SA4010: Use the unknownFields slice properly
+	if len(unknownFields) > 0 {
+		return fmt.Errorf("%w: %v", ErrUnknownFields, unknownFields)
+	}
+
 	return nil
 }
 
@@ -62,20 +75,20 @@ func New(text string) error {
 	return &errorString{text}
 }
 
-// ValidateData - validates data provided provided to create signature
-func ValidateData(ctx context.Context, req *logical.Request, uuid string, derivationPath string) error {
+// ValidateData - validates data provided to create signature
+func ValidateData(ctx context.Context, req *logical.Request, uuid, derivationPath string) error {
 	// Check if user provided UUID or not
 	if uuid == "" {
-		return errors.New("Provide a valid UUID")
+		return ErrInvalidUUID
 	}
 
 	// base check: if derivation path is valid or not
 	if derivationPath == "" {
-		return errors.New("Provide a valid path")
+		return ErrInvalidPath
 	}
 
 	if !UUIDExists(ctx, req, uuid) {
-		return errors.New("UUID does not exists")
+		return ErrUUIDDoesNotExist
 	}
 	return nil
 }

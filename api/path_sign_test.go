@@ -20,12 +20,12 @@ import (
 
 // Test constants for sign tests
 const (
-	signTestUUID = "test-uuid-123"
-	signTestDerivationPath = "m/44'/60'/0'/0/0"
-	signTestValidMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-	signTestPassphrase = "test-passphrase"
-	signTestPayload = `{"nonce":42,"value":1000000000000000000,"gasLimit":21000,"gasPrice":20000000000,"to":"0x742d35Cc6634C0532925a3b8D359A5C5119e32C8","data":"0x","chainId":1}`
-	signTestInvalidPayload = `{"invalid": "json"}`
+	signTestUUID             = "test-uuid-123"
+	signTestDerivationPath   = "m/44'/60'/0'/0/0"
+	signTestValidMnemonic    = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	signTestPassphrase       = "test-passphrase"
+	signTestPayload          = `{"nonce":42,"value":1000000000000000000,"gasLimit":21000,"gasPrice":20000000000,"to":"0x742d35Cc6634C0532925a3b8D359A5C5119e32C8","data":"0x","chainId":1}`
+	signTestInvalidPayload   = `{"invalid": "json"}`
 	signTestMalformedPayload = `{invalid json}`
 )
 
@@ -81,7 +81,7 @@ func createSignFieldData(data map[string]interface{}) *framework.FieldData {
 			Description: "Development mode flag",
 		},
 	}
-	
+
 	return &framework.FieldData{
 		Raw:    data,
 		Schema: schema,
@@ -89,9 +89,9 @@ func createSignFieldData(data map[string]interface{}) *framework.FieldData {
 }
 
 // Helper function to create test backend for sign tests
-func createSignTestBackend(t *testing.T) *backend {
+func createSignTestBackend(_ *testing.T) *Backend {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	return &backend{
+	return &Backend{
 		logger: logger,
 	}
 }
@@ -104,7 +104,7 @@ func createUserStorageEntrySign(uuid, username, mnemonic, passphrase string) *lo
 		Mnemonic:   mnemonic,
 		Passphrase: passphrase,
 	}
-	
+
 	userData, _ := json.Marshal(user)
 	return &logical.StorageEntry{
 		Key:   config.StorageBasePath + uuid,
@@ -114,7 +114,7 @@ func createUserStorageEntrySign(uuid, username, mnemonic, passphrase string) *lo
 
 func TestBackend_PathSign(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name           string
 		fieldData      map[string]interface{}
@@ -197,7 +197,7 @@ func TestBackend_PathSign(t *testing.T) {
 				"payload":  signTestPayload,
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorageSign) {
+			setupStorage: func(_ *MockStorageSign) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
@@ -211,7 +211,7 @@ func TestBackend_PathSign(t *testing.T) {
 				"payload":  signTestPayload,
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorageSign) {
+			setupStorage: func(_ *MockStorageSign) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
@@ -262,12 +262,12 @@ func TestBackend_PathSign(t *testing.T) {
 				"payload":  signTestPayload,
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorageSign) {
+			setupStorage: func(_ *MockStorageSign) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
 			wantStatusCode: http.StatusUnprocessableEntity,
-			wantErrMsg:     "Provide a valid UUID",
+			wantErrMsg:     "provide a valid UUID",
 		},
 		{
 			name: "empty derivation path",
@@ -278,12 +278,12 @@ func TestBackend_PathSign(t *testing.T) {
 				"payload":  signTestPayload,
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorageSign) {
+			setupStorage: func(_ *MockStorageSign) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
 			wantStatusCode: http.StatusUnprocessableEntity,
-			wantErrMsg:     "Provide a valid path",
+			wantErrMsg:     "provide a valid path",
 		},
 		{
 			name: "uuid does not exist",
@@ -406,24 +406,24 @@ func TestBackend_PathSign(t *testing.T) {
 			// Setup
 			mockStorage := new(MockStorageSign)
 			backend := createSignTestBackend(t)
-			
+
 			// Setup storage expectations
 			if tt.setupStorage != nil {
 				tt.setupStorage(mockStorage)
 			}
-			
+
 			// Setup field data
 			fieldData := createSignFieldData(tt.fieldData)
-			
+
 			// Create request with mock storage
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data:    tt.fieldData,
 			}
-			
+
 			// Execute
 			got, err := backend.pathSign(ctx, req, fieldData)
-			
+
 			// Assert error expectations
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -438,7 +438,7 @@ func TestBackend_PathSign(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, got)
-				
+
 				// Assert response structure
 				if tt.want != nil {
 					assert.NotNil(t, got.Data)
@@ -450,7 +450,7 @@ func TestBackend_PathSign(t *testing.T) {
 					assert.NotEmpty(t, signature)
 				}
 			}
-			
+
 			// Verify all mock expectations were met
 			mockStorage.AssertExpectations(t)
 		})
@@ -459,7 +459,7 @@ func TestBackend_PathSign(t *testing.T) {
 
 func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name     string
 		coinType int
@@ -481,17 +481,17 @@ func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 			wantErr:  true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockStorage := new(MockStorageSign)
 			backend := createSignTestBackend(t)
-			
+
 			// Setup storage expectations
 			mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{signTestUUID}, nil)
 			userEntry := createUserStorageEntrySign(signTestUUID, "test-user", signTestValidMnemonic, signTestPassphrase)
 			mockStorage.On("Get", ctx, config.StorageBasePath+signTestUUID).Return(userEntry, nil)
-			
+
 			fieldData := createSignFieldData(map[string]interface{}{
 				"uuid":     signTestUUID,
 				"path":     signTestDerivationPath,
@@ -499,7 +499,7 @@ func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 				"payload":  signTestPayload,
 				"isDev":    false,
 			})
-			
+
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data: map[string]interface{}{
@@ -510,9 +510,9 @@ func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 					"isDev":    false,
 				},
 			}
-			
+
 			got, err := backend.pathSign(ctx, req, fieldData)
-			
+
 			// For unsupported coin types, we expect an error
 			// Currently only Ether is supported by the EVM adapter
 			if tt.wantErr {
@@ -522,7 +522,7 @@ func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 				assert.NotNil(t, got)
 				assert.Contains(t, got.Data, "signature")
 			}
-			
+
 			mockStorage.AssertExpectations(t)
 		})
 	}
@@ -530,7 +530,7 @@ func TestBackend_PathSign_CoinTypeSpecific(t *testing.T) {
 
 func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 	ctx := context.Background()
-	
+
 	tests := []struct {
 		name        string
 		payload     string
@@ -557,17 +557,17 @@ func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 			expectError: true,
 		},
 	}
-	
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			mockStorage := new(MockStorageSign)
 			backend := createSignTestBackend(t)
-			
+
 			// Setup storage expectations
 			mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{signTestUUID}, nil)
 			userEntry := createUserStorageEntrySign(signTestUUID, "test-user", signTestValidMnemonic, signTestPassphrase)
 			mockStorage.On("Get", ctx, config.StorageBasePath+signTestUUID).Return(userEntry, nil)
-			
+
 			fieldData := createSignFieldData(map[string]interface{}{
 				"uuid":     signTestUUID,
 				"path":     signTestDerivationPath,
@@ -575,7 +575,7 @@ func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 				"payload":  tt.payload,
 				"isDev":    false,
 			})
-			
+
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data: map[string]interface{}{
@@ -586,9 +586,9 @@ func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 					"isDev":    false,
 				},
 			}
-			
+
 			got, err := backend.pathSign(ctx, req, fieldData)
-			
+
 			if tt.expectError {
 				assert.Error(t, err)
 			} else {
@@ -596,7 +596,7 @@ func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 				assert.NotNil(t, got)
 				assert.Contains(t, got.Data, "signature")
 			}
-			
+
 			mockStorage.AssertExpectations(t)
 		})
 	}
@@ -605,7 +605,7 @@ func TestBackend_PathSign_PayloadValidation(t *testing.T) {
 func TestBackend_PathSign_EdgeCases(t *testing.T) {
 	ctx := context.Background()
 	backend := createSignTestBackend(t)
-	
+
 	t.Run("nil_context", func(t *testing.T) {
 		mockStorage := new(MockStorageSign)
 		data := map[string]interface{}{
@@ -616,28 +616,28 @@ func TestBackend_PathSign_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createSignFieldData(data)
-		
+
 		// Mock with nil context using mock.Anything
 		mockStorage.On("List", mock.Anything, config.StorageBasePath).Return([]string{}, assert.AnError)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, err := backend.pathSign(nil, req, fieldData)
 		assert.Error(t, err) // Expected to fail with nil context or UUID not found
-		
+
 		mockStorage.AssertExpectations(t)
 	})
-	
+
 	t.Run("very_long_derivation_path", func(t *testing.T) {
 		mockStorage := new(MockStorageSign)
 		longPath := "m/44'/60'/0'/0/" + string(make([]byte, 1000))
 		for i := range longPath[14:] {
 			longPath = longPath[:14+i] + "1" + longPath[14+i+1:]
 		}
-		
+
 		data := map[string]interface{}{
 			"uuid":     signTestUUID,
 			"path":     longPath,
@@ -646,26 +646,26 @@ func TestBackend_PathSign_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createSignFieldData(data)
-		
+
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{signTestUUID}, nil)
 		userEntry := createUserStorageEntrySign(signTestUUID, "test-user", signTestValidMnemonic, signTestPassphrase)
 		mockStorage.On("Get", ctx, config.StorageBasePath+signTestUUID).Return(userEntry, nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, err := backend.pathSign(ctx, req, fieldData)
 		assert.Error(t, err) // Expected to fail with invalid path
-		
+
 		mockStorage.AssertExpectations(t)
 	})
-	
+
 	t.Run("large_payload", func(t *testing.T) {
 		mockStorage := new(MockStorageSign)
 		largePayload := `{"nonce":42,"value":1000000000000000000,"gasLimit":21000,"gasPrice":20000000000,"to":"0x742d35Cc6634C0532925a3b8D359A5C5119e32C8","data":"0x` + string(make([]byte, 10000)) + `","chainId":1}`
-		
+
 		data := map[string]interface{}{
 			"uuid":     signTestUUID,
 			"path":     signTestDerivationPath,
@@ -674,22 +674,22 @@ func TestBackend_PathSign_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createSignFieldData(data)
-		
+
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{signTestUUID}, nil)
 		userEntry := createUserStorageEntrySign(signTestUUID, "test-user", signTestValidMnemonic, signTestPassphrase)
 		mockStorage.On("Get", ctx, config.StorageBasePath+signTestUUID).Return(userEntry, nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		// This may succeed or fail depending on payload validation
 		// The test is mainly to ensure no panic occurs
 		assert.NotPanics(t, func() {
 			backend.pathSign(ctx, req, fieldData)
 		})
-		
+
 		mockStorage.AssertExpectations(t)
 	})
 }
@@ -698,13 +698,13 @@ func TestBackend_PathSign_EdgeCases(t *testing.T) {
 func BenchmarkBackend_PathSign(b *testing.B) {
 	ctx := context.Background()
 	backend := createSignTestBackend(&testing.T{})
-	
+
 	for i := 0; i < b.N; i++ {
 		mockStorage := new(MockStorageSign)
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{signTestUUID}, nil)
 		userEntry := createUserStorageEntrySign(signTestUUID, "test-user", signTestValidMnemonic, signTestPassphrase)
 		mockStorage.On("Get", ctx, config.StorageBasePath+signTestUUID).Return(userEntry, nil)
-		
+
 		data := map[string]interface{}{
 			"uuid":     signTestUUID,
 			"path":     signTestDerivationPath,
@@ -713,12 +713,12 @@ func BenchmarkBackend_PathSign(b *testing.B) {
 			"isDev":    false,
 		}
 		fieldData := createSignFieldData(data)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, _ = backend.pathSign(ctx, req, fieldData)
 	}
 }

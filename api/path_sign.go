@@ -14,7 +14,8 @@ import (
 	"github.com/payment-system/dq-vault/lib/slip44"
 )
 
-func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
+func (b *Backend) pathSign(ctx context.Context, req *logical.Request,
+	d *framework.FieldData) (*logical.Response, error) {
 	backendLogger := b.logger.With(slog.String("op", "path_sign"))
 	if err := helpers.ValidateFields(req, d); err != nil {
 		backendLogger.Error("validate fields", "error", err)
@@ -69,14 +70,14 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framewo
 	seed, err := lib.SeedFromMnemonic(userInfo.Mnemonic, userInfo.Passphrase)
 
 	// obtains blockchain adapater based on coinType
-	adapter := adapter.GetInventory(backendLogger)
+	adapterInventory := adapter.GetInventory(backendLogger)
 	if err != nil {
 		backendLogger.Error("get adapter", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
 	// creates signature from raw transaction payload
-	txHex, err := adapter.CreateSignedTransaction(seed, uint16(coinType), derivationPath, payload, isDev)
+	txHex, err := adapterInventory.CreateSignedTransaction(seed, uint16(coinType), derivationPath, payload, isDev)
 	if err != nil {
 		backendLogger.Error("create signature", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())

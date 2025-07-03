@@ -2,18 +2,24 @@ package adapter
 
 import (
 	"log/slog"
+	"sync"
 
 	"github.com/payment-system/dq-vault/lib/adapter/evm"
 )
 
-var i *AdapterInventory
+// Package-level variables for singleton pattern
+var (
+	inventory *Inventory //nolint:gochecknoglobals // singleton pattern requires global state
+	once      sync.Once  //nolint:gochecknoglobals // singleton pattern requires global state
+)
 
-func GetInventory(logger *slog.Logger) *AdapterInventory {
-	if i == nil {
-		i = NewAdapterInventory(
+// GetInventory returns the singleton adapter inventory instance
+func GetInventory(logger *slog.Logger) *Inventory {
+	once.Do(func() {
+		inventory = NewAdapterInventory(
 			logger,
 			evm.NewEthereumAdapter(logger),
 		)
-	}
-	return i
+	})
+	return inventory
 }

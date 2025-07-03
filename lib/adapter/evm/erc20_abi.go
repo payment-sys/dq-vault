@@ -1,7 +1,7 @@
 package evm
 
 const (
-	ERC20_ABI = `
+	ERC20ABI = `
 	[
 		{
 			"constant": true,

@@ -21,11 +21,11 @@ import (
 
 // Test constants
 const (
-	testUUID = "test-uuid-123"
+	testUUID           = "test-uuid-123"
 	testDerivationPath = "m/44'/60'/0'/0/0"
-	testMnemonic = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
-	testPassphrase = "test-passphrase"
-	testAddress = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
+	testMnemonic       = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about"
+	testPassphrase     = "test-passphrase"
+	testAddress        = "0x9858EfFD232B4033E47d90003D41EC34EcaEda94"
 )
 
 // MockStorage implements logical.Storage for testing
@@ -77,7 +77,7 @@ func createFieldData(data map[string]interface{}) *framework.FieldData {
 			Description: "Development mode flag",
 		},
 	}
-	
+
 	return &framework.FieldData{
 		Raw:    data,
 		Schema: schema,
@@ -85,9 +85,9 @@ func createFieldData(data map[string]interface{}) *framework.FieldData {
 }
 
 // Helper function to create test backend
-func createTestBackend(t *testing.T) *backend {
+func createTestBackend(_ *testing.T) *Backend {
 	logger := slog.New(slog.NewTextHandler(os.Stdout, nil))
-	return &backend{
+	return &Backend{
 		logger: logger,
 	}
 }
@@ -96,7 +96,7 @@ func createTestBackend(t *testing.T) *backend {
 func createUserStorageEntry(t *testing.T, user helpers.User) *logical.StorageEntry {
 	data, err := json.Marshal(user)
 	require.NoError(t, err)
-	
+
 	return &logical.StorageEntry{
 		Key:   config.StorageBasePath + testUUID,
 		Value: data,
@@ -105,13 +105,13 @@ func createUserStorageEntry(t *testing.T, user helpers.User) *logical.StorageEnt
 
 func TestBackend_PathAddress(t *testing.T) {
 	ctx := context.Background()
-	
+
 	// Test user data
 	testUser := helpers.User{
 		Mnemonic:   testMnemonic,
 		Passphrase: testPassphrase,
 	}
-	
+
 	tests := []struct {
 		name           string
 		fieldData      map[string]interface{}
@@ -171,7 +171,7 @@ func TestBackend_PathAddress(t *testing.T) {
 				"coinType": int(slip44.Ether),
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorage) {
+			setupStorage: func(_ *MockStorage) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
@@ -184,7 +184,7 @@ func TestBackend_PathAddress(t *testing.T) {
 				"coinType": int(slip44.Ether),
 				"isDev":    false,
 			},
-			setupStorage: func(ms *MockStorage) {
+			setupStorage: func(_ *MockStorage) {
 				// No storage expectations since validation should fail first
 			},
 			wantErr:        true,
@@ -326,24 +326,24 @@ func TestBackend_PathAddress(t *testing.T) {
 			// Setup
 			mockStorage := new(MockStorage)
 			backend := createTestBackend(t)
-			
+
 			// Setup storage expectations
 			if tt.setupStorage != nil {
 				tt.setupStorage(mockStorage)
 			}
-			
+
 			// Setup field data
 			fieldData := createFieldData(tt.fieldData)
-			
-			// Create request with mock storage  
+
+			// Create request with mock storage
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data:    tt.fieldData,
 			}
-			
+
 			// Execute
 			got, err := backend.pathAddress(ctx, req, fieldData)
-			
+
 			// Assert error expectations
 			if tt.wantErr {
 				assert.Error(t, err)
@@ -358,7 +358,7 @@ func TestBackend_PathAddress(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 				assert.NotNil(t, got)
-				
+
 				// Assert response structure
 				if tt.want != nil {
 					assert.NotNil(t, got.Data)
@@ -366,7 +366,7 @@ func TestBackend_PathAddress(t *testing.T) {
 					assert.NotEmpty(t, got.Data["address"])
 				}
 			}
-			
+
 			// Verify all mock expectations were met
 			mockStorage.AssertExpectations(t)
 		})
@@ -375,12 +375,12 @@ func TestBackend_PathAddress(t *testing.T) {
 
 func TestBackend_PathAddress_CoinTypeSpecific(t *testing.T) {
 	ctx := context.Background()
-	
+
 	testUser := helpers.User{
 		Mnemonic:   testMnemonic,
 		Passphrase: testPassphrase,
 	}
-	
+
 	// Test different coin types
 	coinTypeTests := []struct {
 		name           string
@@ -407,25 +407,25 @@ func TestBackend_PathAddress_CoinTypeSpecific(t *testing.T) {
 			shouldOverride: false,
 		},
 	}
-	
+
 	for _, tt := range coinTypeTests {
 		t.Run(tt.name, func(t *testing.T) {
 			// Setup
 			mockStorage := new(MockStorage)
 			backend := createTestBackend(t)
-			
+
 			entry := createUserStorageEntry(t, testUser)
 			mockStorage.On("Get", ctx, config.StorageBasePath+testUUID).Return(entry, nil)
 			// Mock List for UUID existence check
 			mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{testUUID}, nil)
-			
+
 			fieldData := createFieldData(map[string]interface{}{
 				"uuid":     testUUID,
 				"path":     testDerivationPath,
 				"coinType": int(tt.coinType),
 				"isDev":    false,
 			})
-			
+
 			req := &logical.Request{
 				Storage: mockStorage,
 				Data: map[string]interface{}{
@@ -435,10 +435,10 @@ func TestBackend_PathAddress_CoinTypeSpecific(t *testing.T) {
 					"isDev":    false,
 				},
 			}
-			
+
 			// Execute
 			got, err := backend.pathAddress(ctx, req, fieldData)
-			
+
 			// For unsupported coin types, we expect an error
 			// Currently only Ether is supported by the EVM adapter
 			if tt.coinType != slip44.Ether {
@@ -448,7 +448,7 @@ func TestBackend_PathAddress_CoinTypeSpecific(t *testing.T) {
 				assert.NotNil(t, got)
 				assert.Contains(t, got.Data, "address")
 			}
-			
+
 			mockStorage.AssertExpectations(t)
 		})
 	}
@@ -457,7 +457,7 @@ func TestBackend_PathAddress_CoinTypeSpecific(t *testing.T) {
 func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 	ctx := context.Background()
 	backend := createTestBackend(t)
-	
+
 	t.Run("nil context", func(t *testing.T) {
 		mockStorage := new(MockStorage)
 		data := map[string]interface{}{
@@ -467,24 +467,24 @@ func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createFieldData(data)
-		
+
 		// Mock the List call with nil context using mock.Anything
 		mockStorage.On("List", mock.Anything, config.StorageBasePath).Return([]string{}, assert.AnError)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		// Should handle nil context gracefully
 		_, err := backend.pathAddress(nil, req, fieldData)
 		// The function should still process but might fail at storage level
 		// The exact behavior depends on the storage implementation
 		assert.Error(t, err) // Expected to fail with nil context
-		
+
 		mockStorage.AssertExpectations(t)
 	})
-	
+
 	t.Run("empty uuid", func(t *testing.T) {
 		mockStorage := new(MockStorage)
 		data := map[string]interface{}{
@@ -494,16 +494,16 @@ func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createFieldData(data)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, err := backend.pathAddress(ctx, req, fieldData)
 		assert.Error(t, err)
 	})
-	
+
 	t.Run("large coin type value", func(t *testing.T) {
 		mockStorage := new(MockStorage)
 		data := map[string]interface{}{
@@ -513,7 +513,7 @@ func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 			"isDev":    false,
 		}
 		fieldData := createFieldData(data)
-		
+
 		testUser := helpers.User{
 			Mnemonic:   testMnemonic,
 			Passphrase: testPassphrase,
@@ -522,15 +522,15 @@ func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 		mockStorage.On("Get", ctx, config.StorageBasePath+testUUID).Return(entry, nil)
 		// Mock List for UUID existence check
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{testUUID}, nil)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, err := backend.pathAddress(ctx, req, fieldData)
 		assert.Error(t, err) // Should fail due to unsupported coin type
-		
+
 		mockStorage.AssertExpectations(t)
 	})
 }
@@ -539,20 +539,20 @@ func TestBackend_PathAddress_EdgeCases(t *testing.T) {
 func BenchmarkBackend_PathAddress(b *testing.B) {
 	ctx := context.Background()
 	backend := createTestBackend(&testing.T{})
-	
+
 	testUser := helpers.User{
 		Mnemonic:   testMnemonic,
 		Passphrase: testPassphrase,
 	}
-	
+
 	entry := createUserStorageEntry(&testing.T{}, testUser)
-	
+
 	for i := 0; i < b.N; i++ {
 		mockStorage := new(MockStorage)
 		mockStorage.On("Get", ctx, config.StorageBasePath+testUUID).Return(entry, nil)
 		// Mock List for UUID existence check
 		mockStorage.On("List", ctx, config.StorageBasePath).Return([]string{testUUID}, nil)
-		
+
 		data := map[string]interface{}{
 			"uuid":     testUUID,
 			"path":     testDerivationPath,
@@ -560,12 +560,12 @@ func BenchmarkBackend_PathAddress(b *testing.B) {
 			"isDev":    false,
 		}
 		fieldData := createFieldData(data)
-		
+
 		req := &logical.Request{
 			Storage: mockStorage,
 			Data:    data,
 		}
-		
+
 		_, _ = backend.pathAddress(ctx, req, fieldData)
 	}
 }

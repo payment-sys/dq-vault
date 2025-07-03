@@ -10,19 +10,19 @@ type adapter interface {
 	CreateSignedTransaction(seed []byte, derivationPath string, payload string) (string, error)
 }
 
-type AdapterInventory struct {
-	logger *slog.Logger
+type Inventory struct {
+	logger   *slog.Logger
 	adapters []adapter
 }
 
-func NewAdapterInventory(logger *slog.Logger, adapters ...adapter) *AdapterInventory {
-	return &AdapterInventory{
-		logger: logger,
+func NewAdapterInventory(logger *slog.Logger, adapters ...adapter) *Inventory {
+	return &Inventory{
+		logger:   logger,
 		adapters: adapters,
 	}
 }
 
-func (i *AdapterInventory) getProvider(coinType uint16) adapter {
+func (i *Inventory) getProvider(coinType uint16) adapter {
 	for _, adapter := range i.adapters {
 		if adapter.CanDo(coinType) {
 			return adapter
@@ -31,7 +31,8 @@ func (i *AdapterInventory) getProvider(coinType uint16) adapter {
 	return nil
 }
 
-func (i *AdapterInventory) DerivePublicKey(seed []byte, coinType uint16, derivationPath string, isDev bool) (string, error) {
+func (i *Inventory) DerivePublicKey(seed []byte, coinType uint16,
+	derivationPath string, isDev bool) (string, error) {
 	logger := i.logger.With(slog.String("op", "derive_public_key"), slog.Uint64("coinType", uint64(coinType)))
 	logger.Info("Deriving public key")
 
@@ -52,7 +53,8 @@ func (i *AdapterInventory) DerivePublicKey(seed []byte, coinType uint16, derivat
 	return pubKey, nil
 }
 
-func (i *AdapterInventory) DeriveAddress(seed []byte, coinType uint16, derivationPath string, isDev bool) (string, error) {
+func (i *Inventory) DeriveAddress(seed []byte, coinType uint16,
+	derivationPath string, isDev bool) (string, error) {
 	logger := i.logger.With(slog.String("op", "derive_address"), slog.Uint64("coinType", uint64(coinType)))
 	logger.Info("Deriving address")
 
@@ -73,7 +75,8 @@ func (i *AdapterInventory) DeriveAddress(seed []byte, coinType uint16, derivatio
 	return address, nil
 }
 
-func (i *AdapterInventory) CreateSignedTransaction(seed []byte, coinType uint16, derivationPath string, payload string, isDev bool) (string, error) {
+func (i *Inventory) CreateSignedTransaction(seed []byte, coinType uint16,
+	derivationPath string, payload string, _ bool) (string, error) {
 	logger := i.logger.With(slog.String("op", "create_signed_transaction"), slog.Uint64("coinType", uint64(coinType)))
 	logger.Info("Creating signed transaction")
 

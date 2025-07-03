@@ -6,11 +6,21 @@ import (
 	"github.com/tyler-smith/go-bip39"
 )
 
+const (
+	// DefaultEntropyLength is the default entropy length for mnemonic generation
+	DefaultEntropyLength = 256
+)
+
+// Static error variables to avoid dynamic error creation
+var (
+	ErrInvalidMnemonic = errors.New("invalid mnemonic")
+)
+
 // GenerateMnemonic will return a string consisting of the mnemonic words for
 // the default entropy = 256.
 // If the provide entropy is invalid, an error will be returned.
 func GenerateMnemonic() (string, error) {
-	return MnemonicFromEntropy(256)
+	return MnemonicFromEntropy(DefaultEntropyLength)
 }
 
 // MnemonicFromEntropy will return a string consisting of the mnemonic words for
@@ -35,7 +45,7 @@ func IsMnemonicValid(mnemonic string) bool {
 // No checking is performed to validate that the string provided is a valid mnemonic.
 func SeedFromMnemonic(mnemonic, passphrase string) ([]byte, error) {
 	if !IsMnemonicValid(mnemonic) {
-		return nil, errors.New("Invalid Mnemonic")
+		return nil, ErrInvalidMnemonic
 	}
 	return bip39.NewSeed(mnemonic, passphrase), nil
 }

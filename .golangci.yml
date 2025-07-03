@@ -1,63 +1,119 @@
+version: "2"
 run:
-  timeout: 5m
-  issues-exit-code: 2
   go: "1.24"
-issues:
-  exclude-files:
-    - ".*_test.go$"
-linters-settings:
-  gocritic:
-    disabled-checks:
-      - ifElseChain
-  wrapcheck:
-    ignorePackageGlobs:
-      - github.com/hashicorp/go-multierror
-      - database/sql
-      - encoding/json
-
+  tests: true
+  allow-parallel-runners: true
 linters:
   enable:
-    - errcheck
-    - govet
-    - ineffassign
-    - staticcheck
-    - typecheck
-    - unused
-    - asasalint
-    - asciicheck
-    - bidichk
-    - bodyclose
-    - decorder
-    - dogsled
-    - dupword
-    - durationcheck
-    - errchkjson
-    - errname
-    - errorlint
-    - exhaustive
-    - exportloopref
-    - forbidigo
-    - gocheckcompilerdirectives
+    - err113
+    - gochecknoglobals
+    - gochecknoinits
     - gocognit
     - goconst
+    - gocritic
     - gocyclo
+    - goprintffuncname
+    - lll
+    - misspell
+    - mnd
+    - nakedret
+    - prealloc
+    - revive
+    - rowserrcheck
+    - staticcheck
+    - unconvert
+    - unparam
+    - whitespace
+  settings:
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    gocritic:
+      enabled-tags:
+        - diagnostic
+        - experimental
+        - opinionated
+        - performance
+        - style
+      disabled-checks:
+        - hugeParam
+        - rangeValCopy
+    gocyclo:
+      min-complexity: 40
+    gosec:
+      excludes:
+        - G104
+        - G107
+        - G109
+        - G110
+        - G204
+        - G301
+        - G304
+        - G307
+        - G401
+        - G402
+        - G403
+        - G404
+        - G501
+        - G502
+        - G503
+        - G504
+        - G505
+        - G601
+    lll:
+      line-length: 120
+    misspell:
+      locale: US
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    rules:
+      - linters:
+          - errcheck
+          - gochecknoglobals
+          - gochecknoinits
+          - gocognit
+          - goconst
+          - gocyclo
+          - goprintffuncname
+          - gosec
+          - govet
+          - ineffassign
+          - lll
+          - misspell
+          - mnd
+          - nakedret
+          - rowserrcheck
+          - staticcheck
+          - structcheck
+          - unconvert
+          - unparam
+          - unused
+          - varcheck
+          - whitespace
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  new-from-rev: ""
+  new-from-patch: ""
+  new: false
+  fix: false
+formatters:
+  enable:
     - gofmt
     - goimports
-    - gomoddirectives
-    - gomodguard
-    - goprintffuncname
-    - gosec
-    - gosmopolitan
-    - importas
-    - interfacebloat
-    - loggercheck
-    - maintidx
-    - nilerr
-    - nilnil
-    - nosprintfhostport
-    - predeclared
-    - promlinter
-    - reassign
-    - rowserrcheck
-    - tenv
-    - wastedassign
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$

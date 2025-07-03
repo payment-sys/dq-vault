@@ -12,17 +12,31 @@ import (
 	bip32 "github.com/tyler-smith/go-bip32"
 )
 
-// DefaultRootDerivationPath is the root path to which custom derivation endpoints
-// are appended. As such, the first account will be at m/44'/60'/0'/0, the second
-// at m/44'/60'/0'/1, etc.
-//
-// 0x80000000 represents harderend
-var defaultRootDerivationPath = derivationPath{0x80000000 + 44, 0x80000000 + 60, 0x80000000 + 0, 0}
+const (
+	// DerivationPathCapacity is the initial capacity for derivation path slices
+	DerivationPathCapacity = 8
+)
+
+// Static error variables to avoid dynamic error creation
+var (
+	ErrEmptyDerivationPath = errors.New("empty derivation path")
+	ErrAmbiguousPath       = errors.New("ambiguous path: use 'm/' prefix for absolute paths, " +
+		"or no leading '/' for relative ones")
+	ErrInvalidComponent            = errors.New("invalid component in derivation path")
+	ErrComponentOutOfRange         = errors.New("component out of allowed range")
+	ErrComponentOutOfHardenedRange = errors.New("component out of allowed hardened range")
+)
+
+// getDefaultRootDerivationPath returns the default root derivation path.
+// This replaces the global variable with a function to avoid linter issues.
+func getDefaultRootDerivationPath() derivationPath {
+	return derivationPath{0x80000000 + 44, 0x80000000 + 60, 0x80000000 + 0, 0}
+}
 
 // DerivationPath represents the computer friendly version of a hierarchical
 // deterministic wallet account derivaion path.
 //
-//   m / purpose' / coin_type' / account' / change / address_index
+//	m / purpose' / coin_type' / account' / change / address_index
 //
 // The BIP-44 spec https://github.com/bitcoin/bips/blob/master/bip-0044.mediawiki
 // defines that the `purpose` be 44' (or 0x8000002C) for crypto currencies, and
@@ -31,7 +45,7 @@ var defaultRootDerivationPath = derivationPath{0x80000000 + 44, 0x80000000 + 60,
 type derivationPath []uint32
 
 // DerivePrivateKey derives the private key of the derivation path.
-func DerivePrivateKey(seed []byte, path string, isDev bool) (*btcec.PrivateKey, error) {
+func DerivePrivateKey(seed []byte, path string, _ bool) (*btcec.PrivateKey, error) {
 	// parse derivation path
 	deriavtionPath, err := parseDerivationPath(path)
 	if err != nil {
@@ -65,26 +79,27 @@ func DerivePrivateKey(seed []byte, path string, isDev bool) (*btcec.PrivateKey, 
 // paths (which will get appended to the default root path) must not have prefixes
 // in front of the first element. Whitespace is ignored.
 func parseDerivationPath(path string) (derivationPath, error) {
-	var result derivationPath
+	// Pre-allocate result slice with estimated capacity
+	result := make(derivationPath, 0, DerivationPathCapacity)
 
 	// Handle absolute or relative paths
 	components := strings.Split(path, "/")
 	switch {
 	case len(components) == 0:
-		return nil, errors.New("empty derivation path")
+		return nil, ErrEmptyDerivationPath
 
 	case strings.TrimSpace(components[0]) == "":
-		return nil, errors.New("ambiguous path: use 'm/' prefix for absolute paths, or no leading '/' for relative ones")
+		return nil, ErrAmbiguousPath
 
 	case strings.TrimSpace(components[0]) == "m":
 		components = components[1:]
 
 	default:
-		result = append(result, defaultRootDerivationPath...)
+		result = append(result, getDefaultRootDerivationPath()...)
 	}
 	// All remaining components are relative, append one by one
 	if len(components) == 0 {
-		return nil, errors.New("empty derivation path") // Empty relative paths
+		return nil, ErrEmptyDerivationPath // Empty relative paths
 	}
 	for _, component := range components {
 		// Ignore any user added whitespace
@@ -99,14 +114,14 @@ func parseDerivationPath(path string) (derivationPath, error) {
 		// Handle the non hardened component
 		bigval, ok := new(big.Int).SetString(component, 0)
 		if !ok {
-			return nil, fmt.Errorf("invalid component: %s", component)
+			return nil, fmt.Errorf("%w: %s", ErrInvalidComponent, component)
 		}
-		max := math.MaxUint32 - value
-		if bigval.Sign() < 0 || bigval.Cmp(big.NewInt(int64(max))) > 0 {
+		maxRange := math.MaxUint32 - value
+		if bigval.Sign() < 0 || bigval.Cmp(big.NewInt(int64(maxRange))) > 0 {
 			if value == 0 {
-				return nil, fmt.Errorf("component %v out of allowed range [0, %d]", bigval, max)
+				return nil, fmt.Errorf("%w [0, %d]: %v", ErrComponentOutOfRange, maxRange, bigval)
 			}
-			return nil, fmt.Errorf("component %v out of allowed hardened range [0, %d]", bigval, max)
+			return nil, fmt.Errorf("%w [0, %d]: %v", ErrComponentOutOfHardenedRange, maxRange, bigval)
 		}
 		value += uint32(bigval.Uint64())
 
