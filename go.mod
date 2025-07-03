@@ -8,13 +8,12 @@ require (
 	github.com/ethereum/go-ethereum v1.12.2
 	github.com/hashicorp/vault/api v1.1.1
 	github.com/hashicorp/vault/sdk v0.2.1
-	github.com/mgutz/logxi v0.0.0-20161027140823-aebf8a7d67ab
 	github.com/pkg/errors v0.9.1
 	github.com/rs/xid v1.3.0
 	github.com/sirupsen/logrus v1.9.0
+	github.com/stretchr/testify v1.8.4
 	github.com/tyler-smith/go-bip32 v1.0.0
 	github.com/tyler-smith/go-bip39 v1.1.0
-	golang.org/x/crypto v0.25.0
 )
 
 require (
@@ -23,8 +22,8 @@ require (
 	github.com/armon/go-metrics v0.3.3 // indirect
 	github.com/armon/go-radix v1.0.0 // indirect
 	github.com/btcsuite/btcd/btcec/v2 v2.2.0 // indirect
-	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/cenkalti/backoff/v3 v3.0.0 // indirect
+	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.0.1 // indirect
 	github.com/fatih/color v1.17.0 // indirect
 	github.com/go-stack/stack v1.8.1 // indirect
@@ -50,7 +49,6 @@ require (
 	github.com/klauspost/compress v1.17.9 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/mgutz/ansi v0.0.0-20200706080929-d51e80ef957d // indirect
 	github.com/mitchellh/copystructure v1.0.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/go-testing-interface v1.14.1 // indirect
@@ -58,9 +56,11 @@ require (
 	github.com/mitchellh/reflectwalk v1.0.0 // indirect
 	github.com/oklog/run v1.0.0 // indirect
 	github.com/pierrec/lz4 v2.5.2+incompatible // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/ryanuber/go-glob v1.0.0 // indirect
-	github.com/stretchr/testify v1.8.4 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
 	go.uber.org/atomic v1.11.0 // indirect
+	golang.org/x/crypto v0.25.0 // indirect
 	golang.org/x/net v0.21.0 // indirect
 	golang.org/x/sys v0.22.0 // indirect
 	golang.org/x/text v0.16.0 // indirect
@@ -69,4 +69,5 @@ require (
 	google.golang.org/grpc v1.37.0 // indirect
 	google.golang.org/protobuf v1.28.1 // indirect
 	gopkg.in/square/go-jose.v2 v2.5.1 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )

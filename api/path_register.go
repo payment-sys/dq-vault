@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/hashicorp/vault/sdk/framework"
@@ -10,15 +10,14 @@ import (
 	"github.com/payment-system/dq-vault/api/helpers"
 	"github.com/payment-system/dq-vault/config"
 	"github.com/payment-system/dq-vault/lib"
-	"github.com/payment-system/dq-vault/logger"
 )
 
 // pathPassphrase corresponds to POST gen/passphrase.
 func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
 	var err error
-	backendLogger := b.logger
+	backendLogger := b.logger.With(slog.String("op", "path_register"))
 	if err = helpers.ValidateFields(req, d); err != nil {
-		logger.Log(backendLogger, config.Error, "register:", err.Error())
+		backendLogger.Error("validate fields", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
@@ -31,8 +30,6 @@ func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *fra
 
 	// default entropy length
 	entropyLength := config.Entropy
-
-	logger.Log(backendLogger, config.Info, "register:", fmt.Sprintf("request username=%v ", username))
 
 	// generate new random UUID
 	uuid := helpers.NewUUID()
@@ -48,14 +45,14 @@ func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *fra
 		// obtain mnemonics from entropy
 		mnemonic, err = lib.MnemonicFromEntropy(entropyLength)
 		if err != nil {
-			logger.Log(backendLogger, config.Error, "register:", err.Error())
+			backendLogger.Error("generate mnemonic", "error", err)
 			return nil, logical.CodedError(http.StatusExpectationFailed, err.Error())
 		}
 	}
 
 	// check if mnemonic is valid or not
 	if !lib.IsMnemonicValid(mnemonic) {
-		logger.Log(backendLogger, config.Error, "register:", fmt.Sprintf("invalid mnemonic=[%v]", mnemonic))
+		backendLogger.Error("invalid mnemonic", "mnemonic", mnemonic)
 		return nil, logical.CodedError(http.StatusExpectationFailed, "Invalid Mnemonic")
 	}
 
@@ -70,17 +67,17 @@ func (b *backend) pathRegister(ctx context.Context, req *logical.Request, d *fra
 	// creates strorage entry with user JSON encoded value
 	store, err := logical.StorageEntryJSON(storagePath, user)
 	if err != nil {
-		logger.Log(backendLogger, config.Error, "register:", err.Error())
+		backendLogger.Error("create storage entry", "error", err)
 		return nil, logical.CodedError(http.StatusExpectationFailed, err.Error())
 	}
 
 	// put user information in store
 	if err = req.Storage.Put(ctx, store); err != nil {
-		logger.Log(backendLogger, config.Error, "register:", err.Error())
+		backendLogger.Error("put user information", "error", err)
 		return nil, logical.CodedError(http.StatusExpectationFailed, err.Error())
 	}
 
-	logger.Log(backendLogger, config.Info, "register:", fmt.Sprintf("user registered username=%v", username))
+	backendLogger.Info("user registered", "username", username)
 
 	// return response
 	return &logical.Response{

@@ -2,7 +2,7 @@ package api
 
 import (
 	"context"
-	"fmt"
+	"log/slog"
 	"net/http"
 
 	"github.com/hashicorp/vault/sdk/framework"
@@ -11,14 +11,13 @@ import (
 	"github.com/payment-system/dq-vault/config"
 	"github.com/payment-system/dq-vault/lib"
 	"github.com/payment-system/dq-vault/lib/adapter"
-	"github.com/payment-system/dq-vault/lib/bip44coins"
-	"github.com/payment-system/dq-vault/logger"
+	"github.com/payment-system/dq-vault/lib/slip44"
 )
 
 func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
-	backendLogger := b.logger
+	backendLogger := b.logger.With(slog.String("op", "path_sign"))
 	if err := helpers.ValidateFields(req, d); err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("validate fields", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
@@ -36,15 +35,17 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framewo
 	// depends on type of transaction
 	payload := d.Get("payload").(string)
 
-	if uint16(coinType) == bip44coins.Bitshares {
+	isDev := d.Get("isDev").(bool)
+
+	if uint16(coinType) == slip44.Bitshares {
 		derivationPath = config.BitsharesDerivationPath
 	}
 
-	logger.Log(backendLogger, config.Info, "signature:", fmt.Sprintf("request  path=[%v] cointype=%v payload=[%v]", derivationPath, coinType, payload))
+	backendLogger.Info("request", "path", derivationPath, "cointype", coinType, "payload", payload)
 
 	// validate data provided
 	if err := helpers.ValidateData(ctx, req, uuid, derivationPath); err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("validate data", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
@@ -52,7 +53,7 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framewo
 	path := config.StorageBasePath + uuid
 	entry, err := req.Storage.Get(ctx, path)
 	if err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("get", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
@@ -60,7 +61,7 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framewo
 	var userInfo helpers.User
 	err = entry.DecodeJSON(&userInfo)
 	if err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("decode json", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
@@ -68,27 +69,20 @@ func (b *backend) pathSign(ctx context.Context, req *logical.Request, d *framewo
 	seed, err := lib.SeedFromMnemonic(userInfo.Mnemonic, userInfo.Passphrase)
 
 	// obtains blockchain adapater based on coinType
-	adapter, err := adapter.GetAdapter(uint16(coinType), seed, derivationPath)
+	adapter := adapter.GetInventory(backendLogger)
 	if err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
-		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
-	}
-
-	// Generates and stores ECDSA private key in adapter
-	_, err = adapter.DerivePrivateKey(backendLogger)
-	if err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("get adapter", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
 	// creates signature from raw transaction payload
-	txHex, err := adapter.CreateSignature(payload, backendLogger)
+	txHex, err := adapter.CreateSignedTransaction(seed, uint16(coinType), derivationPath, payload, isDev)
 	if err != nil {
-		logger.Log(backendLogger, config.Error, "signature:", err.Error())
+		backendLogger.Error("create signature", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	logger.Log(backendLogger, config.Info, "signature:", fmt.Sprintf("\n[INFO ] signature: created signature signature=[%v]", txHex))
+	backendLogger.Info("signature", "signature", txHex)
 
 	// Returns signature as output
 	return &logical.Response{

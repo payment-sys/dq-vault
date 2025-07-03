@@ -68,3 +68,9 @@ dev:
 	@vault server -dev
 
 .PHONY: run dev
+
+
+.PHONY: lint
+lint:
+	./scripts/lint.sh
+
