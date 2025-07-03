@@ -2,6 +2,9 @@
 export PGPASSWORD ?= $(POSTGRES_PASSWORD)
 export DB_ENTRY ?= psql -h $(DB_HOST) -p 5432 -U $(POSTGRES_USER)
 
+GOCMD=go
+GOTEST=$(GOCMD) test
+
 install-docker:
 	@echo "Installing Docker"
 
@@ -74,3 +77,10 @@ dev:
 lint:
 	./scripts/lint.sh
 
+test-race: ## Run tests with race detection
+	@echo "🧪 Running tests with race detection..."
+	$(GOTEST) -v -race ./...
+
+test-bench: ## Run benchmark tests
+	@echo "🧪 Running benchmark tests..."
+	$(GOTEST) -v -bench=. -benchmem ./...
