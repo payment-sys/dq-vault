@@ -84,3 +84,9 @@ test-race: ## Run tests with race detection
 test-bench: ## Run benchmark tests
 	@echo "🧪 Running benchmark tests..."
 	$(GOTEST) -v -bench=. -benchmem ./...
+
+test-coverage-race: ## Run tests with both coverage and race detection
+	@echo "🧪 Running tests with coverage and race detection..."
+	$(GOTEST) -v -race -coverprofile=coverage.out -covermode=atomic ./...
+	$(GOCMD) tool cover -html=coverage.out -o coverage.html
+	@echo "📊 Coverage report with race detection generated: coverage.html"
