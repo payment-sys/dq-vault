@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/deqode/dq-vault/api/helpers"
-	"github.com/deqode/dq-vault/config"
-	"github.com/deqode/dq-vault/lib"
-	"github.com/deqode/dq-vault/lib/adapter"
-	"github.com/deqode/dq-vault/lib/bip44coins"
-	"github.com/deqode/dq-vault/logger"
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/payment-system/dq-vault/api/helpers"
+	"github.com/payment-system/dq-vault/config"
+	"github.com/payment-system/dq-vault/lib"
+	"github.com/payment-system/dq-vault/lib/adapter"
+	"github.com/payment-system/dq-vault/lib/bip44coins"
+	"github.com/payment-system/dq-vault/logger"
 )
 
 func (b *backend) pathSignature(ctx context.Context, req *logical.Request, d *framework.FieldData) (*logical.Response, error) {
