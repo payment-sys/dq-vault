@@ -8,8 +8,8 @@ import (
 
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
+	"github.com/payment-system/dq-vault/config"
 	"github.com/rs/xid"
-	"github.com/deqode/dq-vault/config"
 )
 
 // User -- stores data related to user

@@ -15,9 +15,9 @@ import (
 	"github.com/btcsuite/btcd/wire"
 	"github.com/btcsuite/btcutil"
 	"github.com/btcsuite/btcutil/base58"
-	"github.com/deqode/dq-vault/config"
-	"github.com/deqode/dq-vault/lib"
-	"github.com/deqode/dq-vault/logger"
+	"github.com/payment-system/dq-vault/config"
+	"github.com/payment-system/dq-vault/lib"
+	"github.com/payment-system/dq-vault/logger"
 	log "github.com/sirupsen/logrus"
 )
 
