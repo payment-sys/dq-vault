@@ -2,8 +2,7 @@ package api
 
 import (
 	"context"
-
-	log "github.com/sirupsen/logrus"
+	"log/slog"
 
 	"github.com/hashicorp/vault/sdk/framework"
 	"github.com/hashicorp/vault/sdk/logical"
@@ -12,22 +11,22 @@ import (
 
 // Factory creates a new usable instance of this secrets engine.
 func Factory(ctx context.Context, c *logical.BackendConfig) (logical.Backend, error) {
-	b := Backend(c)
+	b := NewBackend(c)
 	if err := b.Setup(ctx, c); err != nil {
 		return nil, errors.Wrap(err, "failed to create vault factory")
 	}
 	return b, nil
 }
 
-// backend is the actual backend.
-type backend struct {
+// Backend is the actual backend.
+type Backend struct {
 	*framework.Backend
-	logger log.Logger
+	logger *slog.Logger
 }
 
-// Backend creates a new backend.
-func Backend(c *logical.BackendConfig) *backend {
-	var b backend
+// NewBackend creates a new backend.
+func NewBackend(_ *logical.BackendConfig) *Backend {
+	var b Backend
 
 	b.Backend = &framework.Backend{
 		BackendType: logical.TypeLogical,
@@ -35,7 +34,7 @@ func Backend(c *logical.BackendConfig) *backend {
 		Paths: []*framework.Path{
 
 			// api/register
-			&framework.Path{
+			{
 				Pattern:      "register",
 				HelpSynopsis: "Registers a new user in vault",
 				HelpDescription: `
@@ -45,17 +44,17 @@ Returns randomly generated user UUID
 
 `,
 				Fields: map[string]*framework.FieldSchema{
-					"username": &framework.FieldSchema{
+					"username": {
 						Type:        framework.TypeString,
 						Description: "Username of new user (optional)",
 						Default:     "",
 					},
-					"mnemonic": &framework.FieldSchema{
+					"mnemonic": {
 						Type:        framework.TypeString,
 						Description: "Mnemonic of user (optional)",
 						Default:     "",
 					},
-					"passphrase": &framework.FieldSchema{
+					"passphrase": {
 						Type:        framework.TypeString,
 						Description: "Passphrase of user (optional)",
 						Default:     "",
@@ -66,55 +65,26 @@ Returns randomly generated user UUID
 				},
 			},
 
-			// api/signature
-			&framework.Path{
-				Pattern:         "signature",
-				HelpSynopsis:    "Generate signature from raw transaction",
-				HelpDescription: "Generates signature from stored mnemonic and passphrase using deviation path",
-				Fields: map[string]*framework.FieldSchema{
-					"uuid": &framework.FieldSchema{
-						Type:        framework.TypeString,
-						Description: "UUID of user",
-					},
-					"path": &framework.FieldSchema{
-						Type:        framework.TypeString,
-						Description: "Deviation path to obtain keys",
-						Default:     "",
-					},
-					"coinType": &framework.FieldSchema{
-						Type:        framework.TypeInt,
-						Description: "Cointype of transaction",
-					},
-					"payload": &framework.FieldSchema{
-						Type:        framework.TypeString,
-						Description: "Raw transaction payload",
-					},
-				},
-				Callbacks: map[logical.Operation]framework.OperationFunc{
-					logical.UpdateOperation: b.pathSignature,
-				},
-			},
-
 			// api/sign
-			&framework.Path{
+			{
 				Pattern:         "sign",
 				HelpSynopsis:    "Generate signature from raw transaction",
 				HelpDescription: "Generates signature from stored mnemonic and passphrase using deviation path",
 				Fields: map[string]*framework.FieldSchema{
-					"uuid": &framework.FieldSchema{
+					"uuid": {
 						Type:        framework.TypeString,
 						Description: "UUID of user",
 					},
-					"path": &framework.FieldSchema{
+					"path": {
 						Type:        framework.TypeString,
 						Description: "Deviation path to obtain keys",
 						Default:     "",
 					},
-					"coinType": &framework.FieldSchema{
+					"coinType": {
 						Type:        framework.TypeInt,
 						Description: "Cointype of transaction",
 					},
-					"payload": &framework.FieldSchema{
+					"payload": {
 						Type:        framework.TypeString,
 						Description: "Raw transaction payload",
 					},
@@ -125,21 +95,21 @@ Returns randomly generated user UUID
 			},
 
 			// api/address
-			&framework.Path{
+			{
 				Pattern:         "address",
 				HelpSynopsis:    "Generate address of user",
 				HelpDescription: "Generates address from stored mnemonic and passphrase using deviation path",
 				Fields: map[string]*framework.FieldSchema{
-					"uuid": &framework.FieldSchema{
+					"uuid": {
 						Type:        framework.TypeString,
 						Description: "UUID of user",
 					},
-					"path": &framework.FieldSchema{
+					"path": {
 						Type:        framework.TypeString,
 						Description: "Deviation path to address",
 						Default:     "",
 					},
-					"coinType": &framework.FieldSchema{
+					"coinType": {
 						Type:        framework.TypeInt,
 						Description: "Cointype of transaction",
 					},
@@ -150,7 +120,7 @@ Returns randomly generated user UUID
 			},
 
 			// api/info
-			&framework.Path{
+			{
 				Pattern:      "info",
 				HelpSynopsis: "Display information about this plugin",
 				HelpDescription: `

@@ -12,7 +12,9 @@ import (
 func main() {
 	apiClientMeta := &hasApi.PluginAPIClientMeta{}
 	flags := apiClientMeta.FlagSet()
-	flags.Parse(os.Args[1:]) // Ignore command, strictly parse flags
+	if err := flags.Parse(os.Args[1:]); err != nil {
+		log.Fatal(err)
+	}
 
 	tlsConfig := apiClientMeta.GetTLSConfig()
 	tlsProviderFunc := hasApi.VaultPluginTLSProvider(tlsConfig)

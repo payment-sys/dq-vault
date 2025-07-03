@@ -21,7 +21,6 @@ testing.go
 # Local development tmp
 /tmp/
 version
-scripts
 .travis.yml
 Gopkg.lock
 LICENSE
@@ -35,3 +34,6 @@ commands
 vendor/
 /vault/plugin/dq-vault
 .idea
+coverage.out
+coverage.txt
+gl-code-quality-report.json

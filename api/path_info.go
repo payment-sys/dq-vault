@@ -8,7 +8,8 @@ import (
 )
 
 // pathInfo corresponds to READ gen/info.
-func (b *backend) pathInfo(_ context.Context, req *logical.Request, _ *framework.FieldData) (*logical.Response, error) {
+func (b *Backend) pathInfo(_ context.Context, _ *logical.Request,
+	_ *framework.FieldData) (*logical.Response, error) {
 	return &logical.Response{
 		Data: map[string]interface{}{
 			"Info": backendHelp,
