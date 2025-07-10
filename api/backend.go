@@ -28,6 +28,7 @@ type Backend struct {
 func NewBackend(_ *logical.BackendConfig) *Backend {
 	var b Backend
 
+	b.logger = slog.With(slog.String("component", "backend"))
 	b.Backend = &framework.Backend{
 		BackendType: logical.TypeLogical,
 		Help:        backendHelp,
