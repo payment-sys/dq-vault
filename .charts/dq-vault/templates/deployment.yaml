@@ -61,7 +61,7 @@ spec:
           protocol: TCP
         livenessProbe:
           httpGet:
-            path: /v1/sys/health
+            path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
             port: http
             scheme: HTTP
           initialDelaySeconds: 30
@@ -71,7 +71,7 @@ spec:
           failureThreshold: 3
         readinessProbe:
           httpGet:
-            path: /v1/sys/health
+            path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
             port: http
             scheme: HTTP
           initialDelaySeconds: 5
