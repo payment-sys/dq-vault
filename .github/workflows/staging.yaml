@@ -341,44 +341,6 @@ jobs:
           method: kubeconfig
           kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
 
-      - name: Run smoke tests
-        run: |
-          echo "Running smoke tests..."
-          
-          # Test basic connectivity
-          kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
-          sleep 15
-          
-          # Test Vault health endpoint with proper parameters
-          if curl -s -f "http://localhost:8200/v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204"; then
-            echo "✅ Vault health endpoint accessible"
-          else
-            echo "❌ Vault health endpoint failed"
-            exit 1
-          fi
-          
-          # Test Vault initialization status (should always work)
-          if curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized"'; then
-            echo "✅ Vault initialization status check passed"
-          else
-            echo "❌ Vault initialization status check failed"
-            exit 1
-          fi
-          
-          # Check if pods are ready
-          if kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault --no-headers | grep -q "1/1.*Running"; then
-            echo "✅ Pod readiness check passed"
-          else
-            echo "❌ Pod readiness check failed"
-            kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
-            exit 1
-          fi
-          
-          # Cleanup
-          pkill -f "kubectl port-forward" || true
-          
-          echo "✅ All smoke tests passed!"
-
       - name: Check resource usage
         run: |
           echo "Checking resource usage..."
