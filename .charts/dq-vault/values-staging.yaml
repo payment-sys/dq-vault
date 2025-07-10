@@ -1,0 +1,153 @@
+# Staging-specific values for DQ Vault
+# This file ensures robust deployment with proper configurations
+
+# Replica configuration
+replicaCount: 1
+
+# Image configuration
+image:
+  repository: registry.digitalocean.com/cpg-staging/dq-vault
+  pullPolicy: Always
+  tag: "" # Will be set by CI/CD
+
+# Image pull secrets
+imagePullSecrets:
+  - name: regcred
+
+# Service account
+serviceAccount:
+  create: true
+  automount: true
+  annotations: {}
+  name: ""
+
+# Pod annotations for tracking deployments
+podAnnotations:
+  deployment.kubernetes.io/revision: "auto"
+  vault.kubernetes.io/agent-inject: "false"
+
+# Pod labels
+podLabels:
+  environment: staging
+  app.kubernetes.io/component: vault
+  app.kubernetes.io/part-of: dq-vault
+
+# Security contexts
+podSecurityContext:
+  runAsNonRoot: false  # Vault needs root for IPC_LOCK
+  fsGroup: 1000
+
+securityContext:
+  capabilities:
+    add:
+      - IPC_LOCK
+  readOnlyRootFilesystem: false
+  runAsNonRoot: false
+
+# Service configuration
+service:
+  type: ClusterIP
+  port: 8200
+  targetPort: 8200
+  name: vault
+
+# Resource limits appropriate for staging
+resources:
+  limits:
+    cpu: 500m
+    memory: 1Gi
+  requests:
+    cpu: 100m
+    memory: 256Mi
+
+# Vault-specific configuration
+vault:
+  dev: false
+  ui: true
+  logLevel: info
+  extraEnv: []
+  extraContainers: []
+  extraVolumes: []
+  customSecrets: []
+  
+  # Vault configuration
+  config:
+    plugin_directory: '/vault/plugins'
+    disable_mlock: true
+    api_addr: 'http://127.0.0.1:8200'
+    cluster_addr: 'https://127.0.0.1:8201'
+    listener:
+      tcp:
+        address: '0.0.0.0:8200'
+        tls_disable: true
+    storage:
+      type: 'file'
+      file:
+        path: '/var/lib/vault/data'
+
+# Persistence configuration for staging
+persistence:
+  enabled: true
+  annotations: {}
+  accessModes:
+    - ReadWriteOnce
+  size: 10Gi
+  storageClass: ""
+
+# Ingress configuration (disabled for staging)
+ingress:
+  enabled: false
+
+# Autoscaling (disabled for staging)
+autoscaling:
+  enabled: false
+
+# Node selector, tolerations, and affinity
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Health check configuration - CRITICAL for Vault
+livenessProbe:
+  httpGet:
+    path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
+    port: http
+    scheme: HTTP
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+  successThreshold: 1
+  failureThreshold: 5  # More tolerant for staging
+
+readinessProbe:
+  httpGet:
+    path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
+    port: http
+    scheme: HTTP
+  initialDelaySeconds: 10
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 3
+
+# Startup probe for initial container startup
+startupProbe:
+  httpGet:
+    path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
+    port: http
+    scheme: HTTP
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 3
+  successThreshold: 1
+  failureThreshold: 30  # Allow up to 2.5 minutes for startup
+
+# Additional fields for compatibility
+secret:
+  dbInstance: ""
+
+consulAgent:
+  join: ""
+  gossipKeySecretName: ""
+
+annotations: {} 

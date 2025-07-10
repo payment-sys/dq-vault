@@ -79,6 +79,18 @@ spec:
           timeoutSeconds: 3
           successThreshold: 1
           failureThreshold: 3
+        {{- if .Values.startupProbe }}
+        startupProbe:
+          httpGet:
+            path: /v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: {{ .Values.startupProbe.initialDelaySeconds | default 5 }}
+          periodSeconds: {{ .Values.startupProbe.periodSeconds | default 5 }}
+          timeoutSeconds: {{ .Values.startupProbe.timeoutSeconds | default 3 }}
+          successThreshold: {{ .Values.startupProbe.successThreshold | default 1 }}
+          failureThreshold: {{ .Values.startupProbe.failureThreshold | default 30 }}
+        {{- end }}
         env:
           - name: POD_IP
             valueFrom:

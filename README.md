@@ -99,6 +99,7 @@ For detailed API documentation and usage examples, see the [plugin usage guide](
 ## Documentation
 
 - [Deployment Guide](DEPLOYMENT.md) - Comprehensive deployment instructions
+- [Vault Initialization Guide](VAULT-INITIALIZATION.md) - How to initialize Vault after deployment
 - [Official Documentation](https://deqode.github.io/dq-vault/) - Full API and usage documentation
 
 ## Architecture

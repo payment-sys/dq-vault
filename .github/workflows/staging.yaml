@@ -235,24 +235,35 @@ jobs:
             --docker-password=${{ secrets.DOCKER_PASSWORD }} \
             --namespace=dq-vault-staging
 
+      - name: Force clean deployment
+        run: |
+          # Delete existing deployment to force recreation
+          kubectl delete deployment dq-vault-staging --namespace=dq-vault-staging --ignore-not-found=true
+          
+          # Wait for deployment to be completely removed
+          kubectl wait --for=delete deployment/dq-vault-staging --namespace=dq-vault-staging --timeout=300s || true
+          
+          # Delete existing pods to ensure fresh start
+          kubectl delete pods -l app.kubernetes.io/name=dq-vault --namespace=dq-vault-staging --ignore-not-found=true
+          
+          echo "✅ Cleaned up existing deployment"
+
       - name: Deploy with Helm
         run: |
+          # Generate unique deployment timestamp for forced updates
+          DEPLOY_TIMESTAMP=$(date +%s)
+          
           helm upgrade --install dq-vault-staging ./.charts/dq-vault \
             --namespace dq-vault-staging \
-            --wait --atomic --timeout=10m \
+            --wait --atomic --timeout=15m \
+            --force \
             --values ./.charts/dq-vault/values.yaml \
+            --values ./.charts/dq-vault/values-staging.yaml \
             --set image.tag=${{ needs.build.outputs.image-tag }} \
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
-            --set image.pullPolicy=Always \
-            --set imagePullSecrets[0].name=regcred \
-            --set vault.dev=false \
-            --set vault.logLevel=info \
-            --set persistence.enabled=true \
-            --set persistence.size=10Gi \
-            --set resources.requests.memory=256Mi \
-            --set resources.requests.cpu=100m \
-            --set resources.limits.memory=512Mi \
-            --set resources.limits.cpu=200m
+            --set podAnnotations.deployTimestamp="$DEPLOY_TIMESTAMP" \
+            --set podAnnotations.buildId="${{ github.run_id }}" \
+            --set podAnnotations.commitSha="${{ github.sha }}"
 
       - name: Verify deployment
         run: |
@@ -271,9 +282,9 @@ jobs:
           kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
           sleep 15
           
-          # Basic connectivity check
+          # Health check with proper parameters for uninitialized Vault
           for i in {1..10}; do
-            if curl -s -f http://localhost:8200/v1/sys/health; then
+            if curl -s -f "http://localhost:8200/v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204"; then
               echo "✅ Vault health check passed!"
               break
             else
@@ -281,6 +292,20 @@ jobs:
               sleep 30
             fi
           done
+          
+          # Additional checks
+          echo "Checking Vault initialization status..."
+          if curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized":false'; then
+            echo "⚠️  Vault is not initialized - this is expected for new deployments"
+            echo "📋 Next steps: Initialize Vault manually with 'kubectl port-forward' and 'curl' commands"
+          elif curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized":true'; then
+            echo "✅ Vault is initialized"
+            if curl -s "http://localhost:8200/v1/sys/health" | grep -q '"sealed":true'; then
+              echo "🔒 Vault is sealed - needs to be unsealed with keys"
+            else
+              echo "🔓 Vault is unsealed and ready for use"
+            fi
+          fi
           
           # Cleanup port-forward
           pkill -f "kubectl port-forward" || true
@@ -320,19 +345,28 @@ jobs:
           kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
           sleep 15
           
-          # Test Vault health endpoint
-          if curl -s -f http://localhost:8200/v1/sys/health; then
+          # Test Vault health endpoint with proper parameters
+          if curl -s -f "http://localhost:8200/v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204"; then
             echo "✅ Vault health endpoint accessible"
           else
             echo "❌ Vault health endpoint failed"
             exit 1
           fi
           
-          # Test Vault initialization status
+          # Test Vault initialization status (should always work)
           if curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized"'; then
             echo "✅ Vault initialization status check passed"
           else
             echo "❌ Vault initialization status check failed"
+            exit 1
+          fi
+          
+          # Check if pods are ready
+          if kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault --no-headers | grep -q "1/1.*Running"; then
+            echo "✅ Pod readiness check passed"
+          else
+            echo "❌ Pod readiness check failed"
+            kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
             exit 1
           fi
           
@@ -361,3 +395,158 @@ jobs:
           echo "- Bitcoin (BTC), Ethereum (ETH), Litecoin (LTC)" >> $GITHUB_STEP_SUMMARY
           echo "- Dogecoin (DOGE), Ripple (XRP), Stellar (XLM)" >> $GITHUB_STEP_SUMMARY
           echo "- Solana (SOL), Bitshares (BTS), Tron (TRX)" >> $GITHUB_STEP_SUMMARY
+
+  # Vault Initialization Phase
+  vault-init:
+    name: Initialize Vault
+    runs-on: ubuntu-latest
+    needs: verify-deployment
+    timeout-minutes: 15
+    if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+    steps:
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Check if Vault is already initialized
+        id: vault-status
+        run: |
+          echo "Checking Vault initialization status..."
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
+          echo "Pod name: $POD_NAME"
+          
+          # Check initialization status
+          INIT_STATUS=$(kubectl exec -n dq-vault-staging $POD_NAME -- vault status -format=json | jq -r '.initialized')
+          echo "Vault initialized: $INIT_STATUS"
+          
+          if [ "$INIT_STATUS" = "true" ]; then
+            echo "vault-initialized=true" >> $GITHUB_OUTPUT
+            echo "✅ Vault is already initialized"
+          else
+            echo "vault-initialized=false" >> $GITHUB_OUTPUT
+            echo "⚠️  Vault is not initialized - will initialize now"
+          fi
+
+      - name: Initialize Vault
+        id: vault-init
+        if: steps.vault-status.outputs.vault-initialized == 'false'
+        run: |
+          echo "Initializing Vault..."
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
+          
+          # Initialize Vault and capture output
+          INIT_OUTPUT=$(kubectl exec -n dq-vault-staging $POD_NAME -- vault operator init -format=json)
+          
+          # Parse the JSON output
+          UNSEAL_KEYS=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[]')
+          ROOT_TOKEN=$(echo "$INIT_OUTPUT" | jq -r '.root_token')
+          
+          # Store in environment variables (masked for security)
+          echo "UNSEAL_KEY_1=$(echo "$UNSEAL_KEYS" | sed -n '1p')" >> $GITHUB_ENV
+          echo "UNSEAL_KEY_2=$(echo "$UNSEAL_KEYS" | sed -n '2p')" >> $GITHUB_ENV
+          echo "UNSEAL_KEY_3=$(echo "$UNSEAL_KEYS" | sed -n '3p')" >> $GITHUB_ENV
+          echo "UNSEAL_KEY_4=$(echo "$UNSEAL_KEYS" | sed -n '4p')" >> $GITHUB_ENV
+          echo "UNSEAL_KEY_5=$(echo "$UNSEAL_KEYS" | sed -n '5p')" >> $GITHUB_ENV
+          echo "ROOT_TOKEN=$ROOT_TOKEN" >> $GITHUB_ENV
+          
+          # Mask sensitive values in logs
+          echo "::add-mask::$ROOT_TOKEN"
+          for key in $(echo "$UNSEAL_KEYS"); do
+            echo "::add-mask::$key"
+          done
+          
+          echo "✅ Vault initialized successfully"
+          echo "vault-init-success=true" >> $GITHUB_OUTPUT
+
+      - name: Unseal Vault
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        run: |
+          echo "Unsealing Vault..."
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
+          
+          # Unseal with first 3 keys
+          kubectl exec -n dq-vault-staging $POD_NAME -- vault operator unseal "$UNSEAL_KEY_1"
+          kubectl exec -n dq-vault-staging $POD_NAME -- vault operator unseal "$UNSEAL_KEY_2"
+          kubectl exec -n dq-vault-staging $POD_NAME -- vault operator unseal "$UNSEAL_KEY_3"
+          
+          # Verify vault is unsealed
+          SEALED_STATUS=$(kubectl exec -n dq-vault-staging $POD_NAME -- vault status -format=json | jq -r '.sealed')
+          
+          if [ "$SEALED_STATUS" = "false" ]; then
+            echo "✅ Vault unsealed successfully"
+          else
+            echo "❌ Failed to unseal Vault"
+            exit 1
+          fi
+
+      - name: Print Vault credentials
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        run: |
+          echo "🔐 DQ Vault Staging Environment Initialized"
+          echo "============================================="
+          echo ""
+          echo "Environment: dq-vault-staging"
+          echo "Release: ${{ github.ref_name }}"
+          echo "Timestamp: $(date -u)"
+          echo "Status: ✅ Successfully initialized and unsealed"
+          echo ""
+          echo "🔑 UNSEAL KEYS:"
+          echo "==============="
+          echo "Key 1: $UNSEAL_KEY_1"
+          echo "Key 2: $UNSEAL_KEY_2"
+          echo "Key 3: $UNSEAL_KEY_3"
+          echo "Key 4: $UNSEAL_KEY_4"
+          echo "Key 5: $UNSEAL_KEY_5"
+          echo ""
+          echo "🎯 ROOT TOKEN:"
+          echo "=============="
+          echo "$ROOT_TOKEN"
+          echo ""
+          echo "⚠️  SECURITY NOTES:"
+          echo "==================="
+          echo "• These credentials provide FULL ACCESS to the Vault"
+          echo "• Store them securely and NEVER commit to version control"
+          echo "• Use unseal keys to recover if Vault gets sealed"
+          echo "• Root token should be used only for initial setup"
+          echo "• Create limited tokens for day-to-day operations"
+          echo ""
+          echo "🚀 NEXT STEPS:"
+          echo "=============="
+          echo "• Access Vault: kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging"
+          echo "• Test health: curl http://localhost:8200/v1/sys/health"
+          echo "• Follow setup guide in repository"
+          echo ""
+          echo "✅ Vault credentials printed above"
+
+      - name: Vault initialization summary
+        if: always()
+        run: |
+          if [ "${{ steps.vault-status.outputs.vault-initialized }}" = "true" ]; then
+            echo "ℹ️  Vault was already initialized - no action needed"
+          elif [ "${{ steps.vault-init.outputs.vault-init-success }}" = "true" ]; then
+            echo "✅ Vault initialization completed successfully!"
+            echo "📋 Credentials printed in workflow logs"
+            echo "🔐 Vault is now ready for use"
+          else
+            echo "⚠️  Vault initialization was skipped or failed"
+          fi
+          
+          # Add to GitHub summary
+          echo "## Vault Initialization Status" >> $GITHUB_STEP_SUMMARY
+          if [ "${{ steps.vault-status.outputs.vault-initialized }}" = "true" ]; then
+            echo "- **Status**: ℹ️ Already initialized" >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.vault-init.outputs.vault-init-success }}" = "true" ]; then
+            echo "- **Status**: ✅ Successfully initialized" >> $GITHUB_STEP_SUMMARY
+            echo "- **Credentials**: 📋 Printed in workflow logs" >> $GITHUB_STEP_SUMMARY
+            echo "- **Unsealed**: ✅ Ready for use" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "- **Status**: ⚠️ Skipped or failed" >> $GITHUB_STEP_SUMMARY
+          fi
