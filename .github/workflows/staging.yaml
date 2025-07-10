@@ -600,8 +600,25 @@ jobs:
             vault write -format=json dq/register username=root mnemonic='${{ secrets.MNEMONIC }}'
           ")
           
-          # Extract UUID from the response
-          USER_UUID=$(echo "$REGISTER_OUTPUT" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
+          # Debug: Show the actual response for troubleshooting
+          echo "Debug - Registration response:"
+          echo "$REGISTER_OUTPUT"
+          
+          # Extract UUID from the response (try multiple methods for reliability)
+          USER_UUID=$(echo "$REGISTER_OUTPUT" | grep -o '"uuid"[[:space:]]*:[[:space:]]*"[^"]*"' | sed 's/.*"\([^"]*\)".*/\1/')
+          echo "Debug - Method 1 result: '$USER_UUID'"
+          
+          # Fallback method if first one fails
+          if [ -z "$USER_UUID" ]; then
+            USER_UUID=$(echo "$REGISTER_OUTPUT" | sed -n 's/.*"uuid"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
+            echo "Debug - Method 2 result: '$USER_UUID'"
+          fi
+          
+          # Another fallback using a simpler approach
+          if [ -z "$USER_UUID" ]; then
+            USER_UUID=$(echo "$REGISTER_OUTPUT" | grep -o '[a-z0-9]\{16\}' | head -n1)
+            echo "Debug - Method 3 result: '$USER_UUID'"
+          fi
           
           if [ -n "$USER_UUID" ]; then
             echo "USER_UUID=$USER_UUID" >> $GITHUB_ENV
