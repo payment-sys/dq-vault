@@ -1,0 +1,62 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dq-vault.fullname" . }}-config
+  labels:
+    {{- include "dq-vault.labels" . | nindent 4 }}
+data:
+  vault.hcl: |
+    ui = {{ .Values.vault.ui | default true }}
+    
+    {{- if .Values.vault.config.plugin_directory }}
+    plugin_directory = "{{ .Values.vault.config.plugin_directory }}"
+    {{- end }}
+    
+    {{- if .Values.vault.config.disable_mlock }}
+    disable_mlock = {{ .Values.vault.config.disable_mlock }}
+    {{- end }}
+    
+    {{- if .Values.vault.config.api_addr }}
+    api_addr = "{{ .Values.vault.config.api_addr }}"
+    {{- end }}
+    
+    {{- if .Values.vault.config.cluster_addr }}
+    cluster_addr = "{{ .Values.vault.config.cluster_addr }}"
+    {{- end }}
+    
+    {{- if .Values.vault.config.listener }}
+    listener "tcp" {
+      address = "{{ .Values.vault.config.listener.tcp.address }}"
+      {{- if .Values.vault.config.listener.tcp.tls_disable }}
+      tls_disable = {{ .Values.vault.config.listener.tcp.tls_disable }}
+      {{- end }}
+      {{- if .Values.vault.config.listener.tcp.tls_cert_file }}
+      tls_cert_file = "{{ .Values.vault.config.listener.tcp.tls_cert_file }}"
+      {{- end }}
+      {{- if .Values.vault.config.listener.tcp.tls_key_file }}
+      tls_key_file = "{{ .Values.vault.config.listener.tcp.tls_key_file }}"
+      {{- end }}
+    }
+    {{- end }}
+    
+    {{- if .Values.vault.config.storage }}
+    storage "{{ .Values.vault.config.storage.type | default "file" }}" {
+      {{- if eq (.Values.vault.config.storage.type | default "file") "file" }}
+      path = "{{ .Values.vault.config.storage.file.path }}"
+      {{- else if eq .Values.vault.config.storage.type "consul" }}
+      address = "{{ .Values.vault.config.storage.consul.address }}"
+      path = "{{ .Values.vault.config.storage.consul.path }}"
+      {{- end }}
+    }
+    {{- end }}
+    
+    {{- if .Values.vault.config.telemetry }}
+    telemetry {
+      {{- if .Values.vault.config.telemetry.statsd_address }}
+      statsd_address = "{{ .Values.vault.config.telemetry.statsd_address }}"
+      {{- end }}
+      {{- if .Values.vault.config.telemetry.disable_hostname }}
+      disable_hostname = {{ .Values.vault.config.telemetry.disable_hostname }}
+      {{- end }}
+    }
+    {{- end }} 

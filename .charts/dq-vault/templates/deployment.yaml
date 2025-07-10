@@ -1,0 +1,166 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "dq-vault.fullname" . }}
+  labels:
+    {{- include "dq-vault.labels" . | nindent 4 }}
+  {{- with .Values.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "dq-vault.selectorLabels" . | nindent 6 }}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 1
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        {{- include "dq-vault.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "dq-vault.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+      {{- if .Values.cloudsql }}
+      {{- include "cloudsql.proxy" . | nindent 6 }}
+      {{- end }}
+      - name: {{ .Chart.Name }}
+        securityContext:
+          {{- toYaml .Values.securityContext | nindent 12 }}
+        image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        {{- if .Values.vault.dev }}
+        command: ["vault", "server", "-dev", "-dev-listen-address", "[::]:8200"]
+        {{- else }}
+        command: ["vault", "server", "-config", "/vault/config/vault.hcl"]
+        {{- end }}
+        {{- if .Values.lifecycle }}
+        lifecycle:
+          {{- toYaml .Values.lifecycle | nindent 10 }}
+        {{- end }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        - name: cluster-address
+          containerPort: 8201
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /v1/sys/health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 30
+          periodSeconds: 10
+          timeoutSeconds: 5
+          successThreshold: 1
+          failureThreshold: 3
+        readinessProbe:
+          httpGet:
+            path: /v1/sys/health
+            port: http
+            scheme: HTTP
+          initialDelaySeconds: 5
+          periodSeconds: 5
+          timeoutSeconds: 3
+          successThreshold: 1
+          failureThreshold: 3
+        env:
+          - name: POD_IP
+            valueFrom:
+              fieldRef:
+                fieldPath: status.podIP
+          - name: VAULT_CLUSTER_ADDR
+            value: "https://$(POD_IP):8201"
+          - name: VAULT_LOG_LEVEL
+            value: {{ .Values.vault.logLevel | quote }}
+          - name: VAULT_ADDR
+            value: "http://127.0.0.1:{{ .Values.service.port }}"
+          - name: SKIP_CHOWN
+            value: "true"
+          - name: VAULT_API_ADDR
+            value: "http://0.0.0.0:{{ .Values.service.port }}"
+        {{- if .Values.vault.extraEnv }}
+        {{- toYaml .Values.vault.extraEnv | nindent 10 }}
+        {{- end }}
+        volumeMounts:
+        - name: vault-config
+          mountPath: /vault/config/
+          readOnly: true
+        - name: vault-root
+          mountPath: /root/
+        {{- if .Values.persistence.enabled }}
+        - name: vault-data
+          mountPath: /var/lib/vault/data
+        {{- end }}
+        {{- range .Values.vault.customSecrets }}
+        - name: {{ .secretName }}
+          mountPath: {{ .mountPath }}
+        {{- end }}
+        resources:
+          {{- toYaml .Values.resources | nindent 10 }}
+      {{- if .Values.vault.extraContainers }}
+      {{- toYaml .Values.vault.extraContainers | nindent 6 }}
+      {{- end }}
+      volumes:
+        - name: vault-config
+          configMap:
+            name: "{{ include "dq-vault.fullname" . }}-config"
+        - name: vault-root
+          emptyDir: {}
+        {{- if .Values.persistence.enabled }}
+        - name: vault-data
+          persistentVolumeClaim:
+            claimName: {{ include "dq-vault.fullname" . }}-data
+        {{- else }}
+        - name: vault-data
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.secret.dbInstance }}
+        - name: {{ .Values.secret.dbInstance }}
+          secret:
+            secretName: {{ .Values.secret.dbInstance }}
+        {{- end }}
+        {{- range .Values.vault.customSecrets }}
+        - name: {{ .secretName }}
+          secret:
+            secretName: {{ .secretName }}
+        {{- end }}
+        {{- if .Values.vault.extraVolumes }}
+        {{- toYaml .Values.vault.extraVolumes | nindent 8 }}
+        {{- end }}
+        {{- if .Values.consulAgent.join }}
+        - name: consul-data
+          emptyDir: {}
+        {{- end }}
+        {{- if .Values.consulAgent.gossipKeySecretName }}
+        - name: consul-gossip-key
+          secret:
+            secretName: {{ .Values.consulAgent.gossipKeySecretName }}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

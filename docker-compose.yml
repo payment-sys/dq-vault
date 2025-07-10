@@ -1,26 +1,18 @@
 version: '2.1'
 services:
-  database:
-    image: postgres:10.5
-    container_name: database
-    volumes:
-      - ./setup/postgres_docker:/docker-entrypoint-initdb.d/
-    env_file:
-      .env
   vault:
-    build: .
-    container_name: vault_plugin
-    image: vault_plugin
-    depends_on:
-      - database
+    image: dq
     ports:
       - 8200:8200
-    links:
-      - database
+    volumes:
+      - /var/vault:/var/lib/vault
+      - /var/log:/var/log
+      - ./vault.hcl:/etc/vault.d/vault.hcl
+    command:
+      - vault
+      - server
+      - -config=/etc/vault.d/vault.hcl
+      - -log-level=info
     cap_add:
       - IPC_LOCK
-    env_file:
-      .env
-    volumes:
-      - ./setup/config.hcl:/vault/config/config.hcl
-    command: make run
+    env_file: ['.env']

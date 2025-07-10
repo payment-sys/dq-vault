@@ -1,0 +1,369 @@
+name: Staging Release Pipeline
+
+on:
+  push:
+    tags:
+      - 'v*.*.*-beta.*'
+
+permissions:
+  contents: write
+  packages: write
+
+env:
+  GO_VERSION: '1.24'
+  REGISTRY: registry.digitalocean.com
+  IMAGE_NAME: cpg-staging/dq-vault
+
+jobs:
+  # Test Code Phase
+  test-code:
+    name: Test Code
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          cache: true
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Verify dependencies
+        run: go mod verify
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v8
+        with:
+          version: latest
+          args: --timeout=5m
+
+      - name: Lint Dockerfile
+        uses: hadolint/hadolint-action@v3.1.0
+        with:
+          dockerfile: Dockerfile
+
+      - name: Run tests with coverage and race detection
+        run: make test-coverage-race
+
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./coverage.out
+          flags: unittests
+          name: codecov-umbrella
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload coverage to GitHub
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.out
+            coverage.html
+
+      - name: Run benchmark tests
+        run: make test-bench
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: |
+            benchmark.out
+
+  # Build Phase
+  build:
+    name: Build Docker Image
+    runs-on: ubuntu-latest
+    needs: test-code
+    timeout-minutes: 20
+    outputs:
+      image-tag: ${{ steps.meta.outputs.version }}
+      image-digest: ${{ steps.build.outputs.digest }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DigitalOcean Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Extract metadata for Docker
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=semver,pattern={{version}}
+            type=semver,pattern={{major}}.{{minor}}-staging
+            type=raw,value=staging-latest
+
+      - name: Build and push Docker image
+        id: build
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+          platforms: linux/amd64
+
+  # Release Latest Phase
+  release-latest:
+    name: Release Latest Staging
+    runs-on: ubuntu-latest
+    needs: build
+    timeout-minutes: 10
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Login to DigitalOcean Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Tag as staging-latest
+        run: |
+          docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }} ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
+          docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
+
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .
+
+      - name: Download benchmark artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+          path: .
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: DQ Vault Staging Release ${{ github.ref_name }}
+          body: |
+            ## DQ Vault Staging Release ${{ github.ref_name }}
+            
+            This is a staging release of the DQ Vault cryptocurrency plugin for HashiCorp Vault.
+            
+            ### Docker Image
+            - Tag: `${{ needs.build.outputs.image-tag }}`
+            - Staging Latest: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest`
+            - Digest: `${{ needs.build.outputs.image-digest }}`
+            
+            ### Supported Cryptocurrencies
+            - Bitcoin (BTC)
+            - Ethereum (ETH)
+            - Litecoin (LTC)
+            - Dogecoin (DOGE)
+            - Ripple (XRP)
+            - Stellar (XLM)
+            - Solana (SOL)
+            - Bitshares (BTS)
+            - Tron (TRX)
+            
+            ### Artifacts
+            - Coverage reports and benchmark results are available in the workflow artifacts
+            
+            ### Deployment
+            This release will be automatically deployed to the staging environment.
+            
+            ### Usage
+            ```bash
+            # Pull the image
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
+            
+            # Run with docker-compose
+            docker-compose up -d
+            ```
+          draft: false
+          prerelease: true
+          files: |
+            coverage.html
+            benchmark.out
+
+  # Deploy Phase
+  deploy:
+    name: Deploy to Staging Environment
+    runs-on: ubuntu-latest
+    needs: [build, release-latest]
+    timeout-minutes: 30
+    environment: staging
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: v3.12.0
+
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Create namespace if not exists
+        run: |
+          kubectl create namespace dq-vault-staging --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Create image pull secret
+        run: |
+          # Delete existing secret if it exists
+          kubectl delete secret regcred --namespace=dq-vault-staging --ignore-not-found=true
+          
+          # Create new secret
+          kubectl create secret docker-registry regcred \
+            --docker-server=${{ env.REGISTRY }} \
+            --docker-username=${{ secrets.DOCKER_USERNAME }} \
+            --docker-password=${{ secrets.DOCKER_PASSWORD }} \
+            --namespace=dq-vault-staging
+
+      - name: Deploy with Helm
+        run: |
+          helm upgrade --install dq-vault-staging ./.charts/dq-vault \
+            --namespace dq-vault-staging \
+            --wait --atomic --timeout=10m \
+            --values ./.charts/dq-vault/values.yaml \
+            --set image.tag=${{ needs.build.outputs.image-tag }} \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.pullPolicy=Always \
+            --set imagePullSecrets[0].name=regcred \
+            --set vault.dev=false \
+            --set vault.logLevel=info \
+            --set persistence.enabled=true \
+            --set persistence.size=10Gi \
+            --set resources.requests.memory=256Mi \
+            --set resources.requests.cpu=100m \
+            --set resources.limits.memory=512Mi \
+            --set resources.limits.cpu=200m
+
+      - name: Verify deployment
+        run: |
+          echo "Waiting for deployment to be ready..."
+          kubectl wait --for=condition=available --timeout=600s deployment/dq-vault-staging -n dq-vault-staging
+          
+          echo "Checking pod status..."
+          kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
+          
+          echo "Checking service status..."
+          kubectl get svc -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
+
+      - name: Run health check
+        run: |
+          echo "Running health check..."
+          kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
+          sleep 15
+          
+          # Basic connectivity check
+          for i in {1..10}; do
+            if curl -s -f http://localhost:8200/v1/sys/health; then
+              echo "✅ Vault health check passed!"
+              break
+            else
+              echo "Health check attempt $i failed, retrying..."
+              sleep 30
+            fi
+          done
+          
+          # Cleanup port-forward
+          pkill -f "kubectl port-forward" || true
+
+      - name: Notify deployment status
+        if: always()
+        run: |
+          if [ "${{ job.status }}" == "success" ]; then
+            echo "✅ DQ Vault staging deployment completed successfully!"
+            echo "Release: ${{ github.ref_name }}"
+            echo "Image: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }}"
+            echo "Environment: dq-vault-staging"
+            echo "Namespace: dq-vault-staging"
+          else
+            echo "❌ DQ Vault staging deployment failed!"
+            exit 1
+          fi
+
+  # Post-deployment verification
+  verify-deployment:
+    name: Verify Deployment
+    runs-on: ubuntu-latest
+    needs: deploy
+    timeout-minutes: 15
+    steps:
+      - name: Configure kubectl
+        uses: azure/k8s-set-context@v4
+        with:
+          method: kubeconfig
+          kubeconfig: ${{ secrets.KUBE_CONFIG_STAGING }}
+
+      - name: Run smoke tests
+        run: |
+          echo "Running smoke tests..."
+          
+          # Test basic connectivity
+          kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
+          sleep 15
+          
+          # Test Vault health endpoint
+          if curl -s -f http://localhost:8200/v1/sys/health; then
+            echo "✅ Vault health endpoint accessible"
+          else
+            echo "❌ Vault health endpoint failed"
+            exit 1
+          fi
+          
+          # Test Vault initialization status
+          if curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized"'; then
+            echo "✅ Vault initialization status check passed"
+          else
+            echo "❌ Vault initialization status check failed"
+            exit 1
+          fi
+          
+          # Cleanup
+          pkill -f "kubectl port-forward" || true
+          
+          echo "✅ All smoke tests passed!"
+
+      - name: Check resource usage
+        run: |
+          echo "Checking resource usage..."
+          kubectl top pods -n dq-vault-staging || echo "Metrics not available"
+          kubectl get events -n dq-vault-staging --sort-by='.lastTimestamp' | tail -20
+
+      - name: Generate deployment report
+        run: |
+          echo "## DQ Vault Staging Deployment Report" >> $GITHUB_STEP_SUMMARY
+          echo "- **Release**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image**: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.build.outputs.image-tag }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Environment**: dq-vault-staging" >> $GITHUB_STEP_SUMMARY
+          echo "- **Namespace**: dq-vault-staging" >> $GITHUB_STEP_SUMMARY
+          echo "- **Status**: ✅ Successfully deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp**: $(date -u)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Supported Cryptocurrencies" >> $GITHUB_STEP_SUMMARY
+          echo "- Bitcoin (BTC), Ethereum (ETH), Litecoin (LTC)" >> $GITHUB_STEP_SUMMARY
+          echo "- Dogecoin (DOGE), Ripple (XRP), Stellar (XLM)" >> $GITHUB_STEP_SUMMARY
+          echo "- Solana (SOL), Bitshares (BTS), Tron (TRX)" >> $GITHUB_STEP_SUMMARY
