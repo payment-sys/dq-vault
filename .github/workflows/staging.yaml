@@ -591,12 +591,14 @@ jobs:
           # Get the pod name
           POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
           
-          # Install curl in the pod if not available
-          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "apk add curl" || echo "curl already installed"
-          
           # Register user with mnemonic using the DQ token
           echo "Registering root user with mnemonic..."
-          REGISTER_OUTPUT=$(kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "curl -s -k --location 'http://127.0.0.1:8200/v1/dq/register' --header 'X-Vault-Token: $DQ_TOKEN' --header 'Content-Type: application/json' --data '{\"username\": \"root\", \"mnemonic\": \"${{ secrets.MNEMONIC }}\"}'")
+          
+          # Use vault write command directly (simpler and more reliable)
+          REGISTER_OUTPUT=$(kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "
+            export VAULT_TOKEN=$DQ_TOKEN && 
+            vault write -format=json dq/register username=root mnemonic='${{ secrets.MNEMONIC }}'
+          ")
           
           # Extract UUID from the response
           USER_UUID=$(echo "$REGISTER_OUTPUT" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
