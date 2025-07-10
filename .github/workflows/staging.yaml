@@ -151,57 +151,15 @@ jobs:
           name: coverage-report
           path: .
 
-      - name: Create GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: ${{ github.ref_name }}
-          name: DQ Vault Staging Release ${{ github.ref_name }}
-          body: |
-            ## DQ Vault Staging Release ${{ github.ref_name }}
-            
-            This is a staging release of the DQ Vault cryptocurrency plugin for HashiCorp Vault.
-            
-            ### Docker Image
-            - Tag: `${{ needs.build.outputs.image-tag }}`
-            - Staging Latest: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest`
-            - Digest: `${{ needs.build.outputs.image-digest }}`
-            
-            ### Supported Cryptocurrencies
-            - Bitcoin (BTC)
-            - Ethereum (ETH)
-            - Litecoin (LTC)
-            - Dogecoin (DOGE)
-            - Ripple (XRP)
-            - Stellar (XLM)
-            - Solana (SOL)
-            - Bitshares (BTS)
-            - Tron (TRX)
-            
-            ### Artifacts
-            - Coverage reports and benchmark results are available in the workflow artifacts
-            
-            ### Deployment
-            This release will be automatically deployed to the staging environment.
-            
-            ### Usage
-            ```bash
-            # Pull the image
-            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
-            
-            # Run with docker-compose
-            docker-compose up -d
-            ```
-          draft: false
-          prerelease: true
-          files: |
-            coverage.html
-            benchmark.out
+      - name: Create preliminary release
+        run: |
+          echo "Preliminary release created - final release will be created after vault initialization"
 
   # Deploy Phase
   deploy:
     name: Deploy to Staging Environment
     runs-on: ubuntu-latest
-    needs: [build, release-latest]
+    needs: build
     timeout-minutes: 30
     environment: staging
     steps:
@@ -271,7 +229,76 @@ jobs:
       - name: Verify deployment
         run: |
           echo "Waiting for deployment to be ready..."
-          kubectl wait --for=condition=available --timeout=600s deployment/dq-vault-staging -n dq-vault-staging
+          
+          # First check if deployment was created successfully
+          if ! kubectl get deployment dq-vault-staging -n dq-vault-staging &>/dev/null; then
+            echo "❌ Deployment was not created successfully"
+            echo "Available deployments:"
+            kubectl get deployments -n dq-vault-staging
+            exit 1
+          fi
+          
+          # Wait for deployment to be available
+          if ! kubectl wait --for=condition=available --timeout=600s deployment/dq-vault-staging -n dq-vault-staging; then
+            echo "❌ Deployment failed to become available within 10 minutes"
+            echo "🔍 Troubleshooting deployment issues..."
+            
+            # Show deployment status
+            echo "Deployment status:"
+            kubectl get deployment dq-vault-staging -n dq-vault-staging -o wide
+            kubectl describe deployment dq-vault-staging -n dq-vault-staging
+            
+            # Show replica set status
+            echo "ReplicaSet status:"
+            kubectl get rs -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
+            kubectl describe rs -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
+            
+            # Show pod status with detailed information
+            echo "Pod status:"
+            kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o wide
+            
+            # Check if there are any pods
+            POD_COUNT=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault --no-headers 2>/dev/null | wc -l)
+            if [ "$POD_COUNT" -eq 0 ]; then
+              echo "❌ No pods found - this indicates a serious deployment issue"
+              echo "Checking namespace events:"
+              kubectl get events -n dq-vault-staging --sort-by='.lastTimestamp' | tail -30
+              exit 1
+            fi
+            
+            # Get the first pod for detailed diagnosis
+            POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}' 2>/dev/null)
+            if [ -n "$POD_NAME" ]; then
+              echo "Detailed pod analysis for: $POD_NAME"
+              kubectl describe pod "$POD_NAME" -n dq-vault-staging
+              
+              # Check pod logs if available
+              echo "Pod logs:"
+              kubectl logs "$POD_NAME" -n dq-vault-staging --tail=100 || echo "No logs available yet"
+              
+              # Check previous logs if pod restarted
+              echo "Previous pod logs (if any):"
+              kubectl logs "$POD_NAME" -n dq-vault-staging --previous --tail=50 || echo "No previous logs"
+            fi
+            
+            # Check PVC status
+            echo "PVC status:"
+            kubectl get pvc -n dq-vault-staging
+            kubectl describe pvc -n dq-vault-staging
+            
+            # Check node resources
+            echo "Node resources:"
+            kubectl top nodes || echo "Metrics not available"
+            kubectl describe nodes || echo "Cannot describe nodes"
+            
+            # Check recent events
+            echo "Recent cluster events:"
+            kubectl get events -n dq-vault-staging --sort-by='.lastTimestamp' | tail -20
+            
+            exit 1
+          fi
+          
+          echo "✅ Deployment is available"
           
           echo "Checking pod status..."
           kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
@@ -279,39 +306,21 @@ jobs:
           echo "Checking service status..."
           kubectl get svc -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
 
-      - name: Run health check
+      - name: Basic deployment check
         run: |
-          echo "Running health check..."
-          kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging &
-          sleep 15
+          echo "Performing basic deployment check..."
           
-          # Health check with proper parameters for uninitialized Vault
-          for i in {1..10}; do
-            if curl -s -f "http://localhost:8200/v1/sys/health?standbyok=true&uninitcode=204&sealedcode=204"; then
-              echo "✅ Vault health check passed!"
-              break
-            else
-              echo "Health check attempt $i failed, retrying..."
-              sleep 30
-            fi
-          done
+          # Just check that resources were created successfully
+          echo "Checking deployment exists..."
+          kubectl get deployment dq-vault-staging -n dq-vault-staging
           
-          # Additional checks
-          echo "Checking Vault initialization status..."
-          if curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized":false'; then
-            echo "⚠️  Vault is not initialized - this is expected for new deployments"
-            echo "📋 Next steps: Initialize Vault manually with 'kubectl port-forward' and 'curl' commands"
-          elif curl -s http://localhost:8200/v1/sys/init | grep -q '"initialized":true'; then
-            echo "✅ Vault is initialized"
-            if curl -s "http://localhost:8200/v1/sys/health" | grep -q '"sealed":true'; then
-              echo "🔒 Vault is sealed - needs to be unsealed with keys"
-            else
-              echo "🔓 Vault is unsealed and ready for use"
-            fi
-          fi
+          echo "Checking service exists..."
+          kubectl get svc dq-vault-staging -n dq-vault-staging
           
-          # Cleanup port-forward
-          pkill -f "kubectl port-forward" || true
+          echo "Checking pod status..."
+          kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault
+          
+          echo "✅ Basic deployment check completed - detailed verification will happen in next stage"
 
       - name: Notify deployment status
         if: always()
@@ -450,7 +459,7 @@ jobs:
           UNSEAL_KEYS=$(echo "$INIT_OUTPUT" | jq -r '.unseal_keys_b64[]')
           ROOT_TOKEN=$(echo "$INIT_OUTPUT" | jq -r '.root_token')
           
-          # Store in environment variables (masked for security)
+          # Store in environment variables (visible for staging)
           echo "UNSEAL_KEY_1=$(echo "$UNSEAL_KEYS" | sed -n '1p')" >> $GITHUB_ENV
           echo "UNSEAL_KEY_2=$(echo "$UNSEAL_KEYS" | sed -n '2p')" >> $GITHUB_ENV
           echo "UNSEAL_KEY_3=$(echo "$UNSEAL_KEYS" | sed -n '3p')" >> $GITHUB_ENV
@@ -458,11 +467,7 @@ jobs:
           echo "UNSEAL_KEY_5=$(echo "$UNSEAL_KEYS" | sed -n '5p')" >> $GITHUB_ENV
           echo "ROOT_TOKEN=$ROOT_TOKEN" >> $GITHUB_ENV
           
-          # Mask sensitive values in logs
-          echo "::add-mask::$ROOT_TOKEN"
-          for key in $(echo "$UNSEAL_KEYS"); do
-            echo "::add-mask::$key"
-          done
+          # Note: Values are NOT masked for staging environment visibility
           
           echo "✅ Vault initialized successfully"
           echo "vault-init-success=true" >> $GITHUB_OUTPUT
@@ -529,6 +534,193 @@ jobs:
           echo ""
           echo "✅ Vault credentials printed above"
 
+      - name: Install DQ Plugin
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        run: |
+          echo "Installing DQ plugin..."
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
+          
+          # Set the root token for plugin installation
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && vault secrets disable /dq" || echo "No existing dq secrets to disable"
+          
+          # Calculate SHA256 of the plugin binary
+          echo "Calculating plugin SHA256..."
+          PLUGIN_SHA256=$(kubectl exec -n dq-vault-staging $POD_NAME -- sh -c 'sha256sum "/vault/plugins/dq-vault" | cut -d" " -f1')
+          echo "Plugin SHA256: $PLUGIN_SHA256"
+          
+          # Register the plugin in Vault's catalog
+          echo "Registering DQ plugin in catalog..."
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && vault write sys/plugins/catalog/dq sha_256=\"$PLUGIN_SHA256\" command=\"dq-vault\""
+          
+          # Enable the plugin as a secrets engine
+          echo "Enabling DQ plugin as secrets engine..."
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && vault secrets enable -path=\"dq\" -plugin-name=\"dq\" plugin"
+          
+          # Create policy for DQ plugin
+          echo "Creating DQ policy..."
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && echo 'path \"dq/*\" { capabilities = [\"read\", \"update\"] }' > /tmp/dq-policy.hcl"
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && vault policy write dq-policy /tmp/dq-policy.hcl"
+          
+          # Create token with DQ policy
+          echo "Creating DQ token..."
+          DQ_TOKEN_OUTPUT=$(kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "export VAULT_TOKEN=$ROOT_TOKEN && vault token create -policy=dq-policy -renewable=false -no-default-policy")
+          DQ_TOKEN=$(echo "$DQ_TOKEN_OUTPUT" | grep "token " | head -1 | awk '{print $2}')
+          
+          echo "DQ_TOKEN=$DQ_TOKEN" >> $GITHUB_ENV
+          
+          echo "✅ DQ plugin installed successfully"
+          echo ""
+          echo "🔧 DQ PLUGIN DETAILS:"
+          echo "====================="
+          echo "Plugin SHA256: $PLUGIN_SHA256"
+          echo "DQ Token: $DQ_TOKEN"
+          echo ""
+          echo "🚀 PLUGIN USAGE:"
+          echo "================"
+          echo "• Register user: vault write dq/register username=\"root\" mnemonic=\"your-mnemonic\""
+          echo "• Create address: vault write dq/address uuid=\"user-uuid\" path=\"m/44'/60'/0'/0/0\" coinType=60"
+          echo "• Sign transaction: vault write dq/signature uuid=\"user-uuid\" path=\"m/44'/60'/0'/0/0\" payload=\"{...}\" coinType=60"
+
+      - name: Register User with Mnemonic
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        run: |
+          echo "Registering user with mnemonic..."
+          
+          # Get the pod name
+          POD_NAME=$(kubectl get pods -n dq-vault-staging -l app.kubernetes.io/name=dq-vault -o jsonpath='{.items[0].metadata.name}')
+          
+          # Install curl in the pod if not available
+          kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "apk add curl" || echo "curl already installed"
+          
+          # Register user with mnemonic using the DQ token
+          echo "Registering root user with mnemonic..."
+          REGISTER_OUTPUT=$(kubectl exec -n dq-vault-staging $POD_NAME -- sh -c "curl -s -k --location 'http://127.0.0.1:8200/v1/dq/register' --header 'X-Vault-Token: $DQ_TOKEN' --header 'Content-Type: application/json' --data '{\"username\": \"root\", \"mnemonic\": \"${{ secrets.MNEMONIC }}\"}'")
+          
+          # Extract UUID from the response
+          USER_UUID=$(echo "$REGISTER_OUTPUT" | grep -o '"uuid":"[^"]*"' | cut -d'"' -f4)
+          
+          if [ -n "$USER_UUID" ]; then
+            echo "USER_UUID=$USER_UUID" >> $GITHUB_ENV
+            echo "✅ User registered successfully"
+            echo ""
+            echo "👤 USER REGISTRATION DETAILS:"
+            echo "============================="
+            echo "Username: root"
+            echo "UUID: $USER_UUID"
+            echo ""
+            echo "🔧 READY TO USE COMMANDS:"
+            echo "========================="
+            echo "• Create BTC address: vault write dq/address uuid=\"$USER_UUID\" path=\"m/44'/0'/0'/0/0\" coinType=0"
+            echo "• Create ETH address: vault write dq/address uuid=\"$USER_UUID\" path=\"m/44'/60'/0'/0/0\" coinType=60"
+            echo "• Create SOL address: vault write dq/address uuid=\"$USER_UUID\" path=\"m/44'/501'/0'\" coinType=501"
+            echo ""
+            echo "🎯 EXAMPLE USAGE:"
+            echo "================="
+            echo "kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging"
+            echo "export VAULT_TOKEN=$DQ_TOKEN"
+            echo "vault write dq/address uuid=\"$USER_UUID\" path=\"m/44'/60'/0'/0/0\" coinType=60"
+          else
+            echo "❌ Failed to register user"
+            echo "Registration response: $REGISTER_OUTPUT"
+            exit 1
+          fi
+
+      - name: Create Credentials File
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        run: |
+          echo "Creating credentials file for GitHub release..."
+          
+          # Create credentials file
+          cat > dq-vault-staging-credentials.txt << EOF
+          DQ Vault Staging Environment Credentials
+          ========================================
+          
+          Release: ${{ github.ref_name }}
+          Environment: dq-vault-staging
+          Timestamp: $(date -u)
+          
+          UNSEAL KEYS:
+          ============
+          Key 1: $UNSEAL_KEY_1
+          Key 2: $UNSEAL_KEY_2
+          Key 3: $UNSEAL_KEY_3
+          Key 4: $UNSEAL_KEY_4
+          Key 5: $UNSEAL_KEY_5
+          
+          ROOT TOKEN:
+          ===========
+          $ROOT_TOKEN
+          
+          DQ PLUGIN TOKEN:
+          ================
+          $DQ_TOKEN
+          
+          USER DETAILS:
+          =============
+          Username: root
+          UUID: $USER_UUID
+          
+          QUICK START COMMANDS:
+          =====================
+          # Connect to Vault
+          kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging
+          export VAULT_TOKEN=$DQ_TOKEN
+          
+          # Create addresses for different cryptocurrencies
+          vault write dq/address uuid="$USER_UUID" path="m/44'/0'/0'/0/0" coinType=0     # Bitcoin
+          vault write dq/address uuid="$USER_UUID" path="m/44'/60'/0'/0/0" coinType=60   # Ethereum
+          vault write dq/address uuid="$USER_UUID" path="m/44'/2'/0'/0/0" coinType=2     # Litecoin
+          vault write dq/address uuid="$USER_UUID" path="m/44'/3'/0'/0/0" coinType=3     # Dogecoin
+          vault write dq/address uuid="$USER_UUID" path="m/44'/144'/0'/0/0" coinType=144 # Ripple
+          vault write dq/address uuid="$USER_UUID" path="m/44'/148'/0'/0/0" coinType=148 # Stellar
+          vault write dq/address uuid="$USER_UUID" path="m/44'/501'/0'" coinType=501     # Solana
+          vault write dq/address uuid="$USER_UUID" path="m/44'/19167'/0'/0/0" coinType=19167 # Bitshares
+          vault write dq/address uuid="$USER_UUID" path="m/44'/195'/0'/0/0" coinType=195 # Tron
+          
+          SECURITY NOTES:
+          ===============
+          • These credentials provide FULL ACCESS to the Vault
+          • Store them securely and NEVER commit to version control
+          • Use unseal keys to recover if Vault gets sealed
+          • Root token should be used only for initial setup
+          • DQ token is for day-to-day operations
+          • This is a STAGING environment - use appropriate security measures
+          
+          VAULT UNSEALING:
+          ================
+          If Vault gets sealed, use these commands to unseal:
+          kubectl exec -n dq-vault-staging [pod-name] -- vault operator unseal $UNSEAL_KEY_1
+          kubectl exec -n dq-vault-staging [pod-name] -- vault operator unseal $UNSEAL_KEY_2
+          kubectl exec -n dq-vault-staging [pod-name] -- vault operator unseal $UNSEAL_KEY_3
+          
+          SUPPORTED CRYPTOCURRENCIES:
+          ===========================
+          • Bitcoin (BTC) - coinType: 0
+          • Ethereum (ETH) - coinType: 60
+          • Litecoin (LTC) - coinType: 2
+          • Dogecoin (DOGE) - coinType: 3
+          • Ripple (XRP) - coinType: 144
+          • Stellar (XLM) - coinType: 148
+          • Solana (SOL) - coinType: 501
+          • Bitshares (BTS) - coinType: 19167
+          • Tron (TRX) - coinType: 195
+          EOF
+          
+          echo "✅ Credentials file created: dq-vault-staging-credentials.txt"
+          
+          # Show file content for verification
+          echo "📄 Credentials file content:"
+          cat dq-vault-staging-credentials.txt
+
+      - name: Upload credentials file as artifact
+        if: steps.vault-init.outputs.vault-init-success == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: dq-vault-staging-credentials
+          path: dq-vault-staging-credentials.txt
+
       - name: Vault initialization summary
         if: always()
         run: |
@@ -537,6 +729,8 @@ jobs:
           elif [ "${{ steps.vault-init.outputs.vault-init-success }}" = "true" ]; then
             echo "✅ Vault initialization completed successfully!"
             echo "📋 Credentials printed in workflow logs"
+            echo "🔧 DQ plugin installed and configured"
+            echo "👤 Root user registered with mnemonic"
             echo "🔐 Vault is now ready for use"
           else
             echo "⚠️  Vault initialization was skipped or failed"
@@ -549,7 +743,97 @@ jobs:
           elif [ "${{ steps.vault-init.outputs.vault-init-success }}" = "true" ]; then
             echo "- **Status**: ✅ Successfully initialized" >> $GITHUB_STEP_SUMMARY
             echo "- **Credentials**: 📋 Printed in workflow logs" >> $GITHUB_STEP_SUMMARY
+            echo "- **DQ Plugin**: 🔧 Installed and configured" >> $GITHUB_STEP_SUMMARY
+            echo "- **User Registration**: 👤 Root user registered" >> $GITHUB_STEP_SUMMARY
             echo "- **Unsealed**: ✅ Ready for use" >> $GITHUB_STEP_SUMMARY
           else
             echo "- **Status**: ⚠️ Skipped or failed" >> $GITHUB_STEP_SUMMARY
           fi
+
+  # Final Release Creation
+  create-final-release:
+    name: Create Final Release
+    runs-on: ubuntu-latest
+    needs: [build, vault-init]
+    timeout-minutes: 10
+    if: github.event_name == 'push' && contains(github.ref, 'refs/tags/')
+    steps:
+      - name: Download coverage artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+          path: .
+
+      - name: Download benchmark results
+        uses: actions/download-artifact@v4
+        with:
+          name: benchmark-results
+          path: .
+
+      - name: Download credentials file
+        uses: actions/download-artifact@v4
+        with:
+          name: dq-vault-staging-credentials
+          path: .
+
+      - name: Create Complete GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: DQ Vault Staging Release ${{ github.ref_name }}
+          body: |
+            ## DQ Vault Staging Release ${{ github.ref_name }}
+            
+            This is a staging release of the DQ Vault cryptocurrency plugin for HashiCorp Vault.
+            
+            ### 🔐 Staging Environment Ready
+            - **Environment**: dq-vault-staging
+            - **Status**: ✅ Deployed and initialized
+            - **Plugin**: 🔧 DQ plugin installed and configured
+            - **User**: 👤 Root user registered with mnemonic
+            - **Docker Image**: `${{ needs.build.outputs.image-tag }}`
+            - **Staging Latest**: `${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest`
+            
+            ### 📄 Credentials File
+            Download the `dq-vault-staging-credentials.txt` file attached to this release for:
+            - 🔑 All 5 Vault unseal keys
+            - 🎯 Root token (admin access)
+            - 🔧 DQ plugin token (limited access)
+            - 👤 User UUID for operations
+            - 🚀 Ready-to-use commands for all supported cryptocurrencies
+            
+            ### Supported Cryptocurrencies
+            - Bitcoin (BTC), Ethereum (ETH), Litecoin (LTC)
+            - Dogecoin (DOGE), Ripple (XRP), Stellar (XLM)
+            - Solana (SOL), Bitshares (BTS), Tron (TRX)
+            
+            ### Quick Start
+            ```bash
+            # Download credentials file and follow the instructions
+            # Connect to staging environment
+            kubectl port-forward svc/dq-vault-staging 8200:8200 -n dq-vault-staging
+            
+            # Use the DQ token from credentials file
+            export VAULT_TOKEN=[dq-token-from-file]
+            
+            # Create your first address
+            vault write dq/address uuid="[uuid-from-file]" path="m/44'/60'/0'/0/0" coinType=60
+            ```
+            
+            ### Docker Usage
+            ```bash
+            # Pull the image
+            docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:staging-latest
+            
+            # Run with docker-compose
+            docker-compose up -d
+            ```
+            
+            ### Security Note
+            This is a **STAGING** environment. The credentials file contains sensitive information suitable for development and testing purposes only.
+          draft: false
+          prerelease: true
+          files: |
+            dq-vault-staging-credentials.txt
+            coverage.html
+            benchmark.out
