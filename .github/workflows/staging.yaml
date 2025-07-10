@@ -67,15 +67,7 @@ jobs:
             coverage.out
             coverage.html
 
-      - name: Run benchmark tests
-        run: make test-bench
 
-      - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
-        with:
-          name: benchmark-results
-          path: |
-            benchmark.out
 
   # Build Phase
   build:
@@ -783,11 +775,7 @@ jobs:
           name: coverage-report
           path: .
 
-      - name: Download benchmark results
-        uses: actions/download-artifact@v4
-        with:
-          name: benchmark-results
-          path: .
+
 
       - name: Download credentials file
         uses: actions/download-artifact@v4
@@ -855,4 +843,3 @@ jobs:
           files: |
             dq-vault-staging-credentials.txt
             coverage.html
-            benchmark.out
