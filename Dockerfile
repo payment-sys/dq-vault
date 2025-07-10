@@ -2,7 +2,7 @@
 FROM golang:1.24-alpine AS builder
 
 # Install build dependencies
-RUN apk add --no-cache git=2.46.0-r0 gcc=13.2.1_git20230522-r1 musl-dev=1.2.4-r1
+RUN apk add --no-cache git=2.49.1-r0 gcc=gcc-14.2.0-r6 musl-dev=1.2.5-r10
 
 # Set working directory
 WORKDIR /app
