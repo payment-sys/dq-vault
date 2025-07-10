@@ -125,9 +125,9 @@ affinity: {}
 vault:
   dev: false
   ui: true
-  extraEnv: {}
-  extraContainers: {}
-  extraVolumes: {}
+  extraEnv: []
+  extraContainers: []
+  extraVolumes: []
   customSecrets: []
   logLevel: "info"
   readiness:

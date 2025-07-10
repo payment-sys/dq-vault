@@ -92,7 +92,7 @@ persistence:
   accessModes:
     - ReadWriteOnce
   size: 10Gi
-  storageClass: ""
+  storageClass: "do-block-storage"
 
 # Ingress configuration (disabled for staging)
 ingress:

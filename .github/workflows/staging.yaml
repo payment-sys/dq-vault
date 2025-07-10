@@ -246,7 +246,10 @@ jobs:
           # Delete existing pods to ensure fresh start
           kubectl delete pods -l app.kubernetes.io/name=dq-vault --namespace=dq-vault-staging --ignore-not-found=true
           
-          echo "✅ Cleaned up existing deployment"
+          # Delete existing PVC to avoid immutability issues
+          kubectl delete pvc dq-vault-staging-data --namespace=dq-vault-staging --ignore-not-found=true
+          
+          echo "✅ Cleaned up existing deployment and PVC"
 
       - name: Deploy with Helm
         run: |
@@ -261,9 +264,9 @@ jobs:
             --values ./.charts/dq-vault/values-staging.yaml \
             --set image.tag=${{ needs.build.outputs.image-tag }} \
             --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
-            --set podAnnotations.deployTimestamp="$DEPLOY_TIMESTAMP" \
-            --set podAnnotations.buildId="${{ github.run_id }}" \
-            --set podAnnotations.commitSha="${{ github.sha }}"
+            --set podAnnotations.deployTimestamp="\"$DEPLOY_TIMESTAMP\"" \
+            --set podAnnotations.buildId="\"${{ github.run_id }}\"" \
+            --set podAnnotations.commitSha="\"${{ github.sha }}\""
 
       - name: Verify deployment
         run: |
