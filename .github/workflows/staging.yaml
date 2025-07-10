@@ -151,12 +151,6 @@ jobs:
           name: coverage-report
           path: .
 
-      - name: Download benchmark artifacts
-        uses: actions/download-artifact@v4
-        with:
-          name: benchmark-results
-          path: .
-
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
