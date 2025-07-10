@@ -1,0 +1,908 @@
+{
+	"info": {
+		"_postman_id": "dq-vault-api-collection",
+		"name": "DQ Vault API Collection",
+		"description": "Complete API collection for DQ Vault - A HashiCorp Vault plugin for cryptocurrency wallet management\n\n## Overview\nDQ Vault provides secure cryptocurrency wallet functionality through HashiCorp Vault, supporting multiple blockchain networks including Bitcoin, Ethereum, Solana, and more.\n\n## Authentication\nAll requests require a valid Vault token in the `X-Vault-Token` header.\n\n## Supported Cryptocurrencies\n- Bitcoin (BTC) - coinType: 0\n- Litecoin (LTC) - coinType: 2  \n- Dogecoin (DOGE) - coinType: 3\n- Ethereum (ETH) - coinType: 60\n- Ethereum Classic (ETC) - coinType: 61\n- Ripple (XRP) - coinType: 144\n- Stellar (XLM) - coinType: 148\n- Tron (TRX) - coinType: 195\n- Solana (SOL) - coinType: 501\n- Bitshares (BTS) - coinType: 69\n\n## Workflow\n1. Register a user with mnemonic\n2. Generate addresses for different cryptocurrencies\n3. Sign transactions using stored keys",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Authentication & Info",
+			"item": [
+				{
+					"name": "Get Plugin Info",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response has plugin info\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('Info');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text",
+								"description": "Vault authentication token"
+							}
+						],
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/info",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"info"
+							]
+						},
+						"description": "Get information about the DQ Vault plugin including version and help text."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication and plugin information endpoints"
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Register User with Mnemonic",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains UUID\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('uuid');",
+									"    pm.expect(responseJson.data.uuid).to.be.a('string');",
+									"    pm.expect(responseJson.data.uuid).to.not.be.empty;",
+									"    ",
+									"    // Store UUID for subsequent requests",
+									"    pm.environment.set('user_uuid', responseJson.data.uuid);",
+									"});",
+									"",
+									"pm.test(\"Response has correct structure\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson).to.have.property('data');",
+									"    pm.expect(responseJson).to.have.property('request_id');",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"{{username}}\",\n    \"mnemonic\": \"{{test_mnemonic}}\",\n    \"passphrase\": \"{{passphrase}}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/register",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"register"
+							]
+						},
+						"description": "Register a new user with a provided mnemonic phrase. If mnemonic is empty, a new one will be generated."
+					},
+					"response": []
+				},
+				{
+					"name": "Register User (Auto-generate Mnemonic)",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains UUID\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('uuid');",
+									"    pm.expect(responseJson.data.uuid).to.be.a('string');",
+									"    pm.expect(responseJson.data.uuid).to.not.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"username\": \"auto-user\",\n    \"mnemonic\": \"\",\n    \"passphrase\": \"\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/register",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"register"
+							]
+						},
+						"description": "Register a new user with auto-generated mnemonic. The system will create a secure random mnemonic phrase."
+					},
+					"response": []
+				}
+			],
+			"description": "User registration and management endpoints"
+		},
+		{
+			"name": "Address Generation",
+			"item": [
+				{
+					"name": "Generate Bitcoin Address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains address\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('address');",
+									"    pm.expect(responseJson.data.address).to.be.a('string');",
+									"    pm.expect(responseJson.data.address).to.not.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/0'/0'/0/0\",\n    \"coinType\": 0\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Bitcoin address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Ethereum Address",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains Ethereum address\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('address');",
+									"    pm.expect(responseJson.data.address).to.match(/^0x[a-fA-F0-9]{40}$/);",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/60'/0'/0/0\",\n    \"coinType\": 60\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate an Ethereum address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Solana Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/501'/0'\",\n    \"coinType\": 501\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Solana address using BIP-44 derivation path (note: Solana uses 4-part derivation path)"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Litecoin Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/2'/0'/0/0\",\n    \"coinType\": 2\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Litecoin address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Dogecoin Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/3'/0'/0/0\",\n    \"coinType\": 3\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Dogecoin address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Ripple Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/144'/0'/0/0\",\n    \"coinType\": 144\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Ripple (XRP) address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Stellar Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/148'/0'/0/0\",\n    \"coinType\": 148\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Stellar (XLM) address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Tron Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/195'/0'/0/0\",\n    \"coinType\": 195\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Tron (TRX) address using BIP-44 derivation path"
+					},
+					"response": []
+				},
+				{
+					"name": "Generate Bitshares Address",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/69'/0'/0/0\",\n    \"coinType\": 69\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate a Bitshares (BTS) address using BIP-44 derivation path"
+					},
+					"response": []
+				}
+			],
+			"description": "Address generation endpoints for various cryptocurrencies"
+		},
+		{
+			"name": "Transaction Signing",
+			"item": [
+				{
+					"name": "Sign Ethereum Transaction",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains signature\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('signature');",
+									"    pm.expect(responseJson.data.signature).to.be.a('string');",
+									"    pm.expect(responseJson.data.signature).to.not.be.empty;",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/60'/0'/0/0\",\n    \"coinType\": 60,\n    \"payload\": \"{\\\"nonce\\\":42,\\\"value\\\":1000000000000000000,\\\"gasLimit\\\":21000,\\\"gasPrice\\\":20000000000,\\\"to\\\":\\\"0x742d35Cc6634C0532925a3b8D359A5C5119e32C8\\\",\\\"data\\\":\\\"0x\\\",\\\"chainId\\\":1}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/signature",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"signature"
+							]
+						},
+						"description": "Sign an Ethereum transaction with the specified payload"
+					},
+					"response": []
+				},
+				{
+					"name": "Sign Solana Transaction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/501'/0'\",\n    \"coinType\": 501,\n    \"payload\": \"{\\\"rawTxHex\\\": \\\"010000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001000508e9589e3c33514a47f3f8e4655fda1908915b4938274253256a63c000a77761ee8759142feccf57082eb2032543e7f68d29a666fc25992c024899ad234cce0164d40ec3100887c28cc85aceb030d588343f287696f469accf82f208e018d06bc300000000000000000000000000000000000000000000000000000000000000001b576941a405b0a8e641a08eb009ac674459306d5dc22f202d992768eb968d273b442cb3912157f13a933d0134282d032b5ffecd01a2dbf1b7790608df002ea78c97258f4e2489f1bb3d1029148e0d830b5a1399daff1084048e7bd8dbe9f85906ddf6e1d765a193d9cbe146ceeb79ac1cb485ed5f5b37913a8cf5857eff00a9b2c97b742167eeea0460cf0faa2388ff7fc692e70ece259dac03c436b04d907202060600010405030700070302010009031027000000000000\\\", \\\"tokenAddress\\\":\\\"4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU\\\"}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/signature",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"signature"
+							]
+						},
+						"description": "Sign a Solana transaction with the specified raw transaction hex"
+					},
+					"response": []
+				},
+				{
+					"name": "Sign Bitcoin Transaction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/0'/0'/0/0\",\n    \"coinType\": 0,\n    \"payload\": \"{\\\"inputs\\\":[{\\\"txid\\\":\\\"abc123\\\",\\\"vout\\\":0,\\\"amount\\\":100000}],\\\"outputs\\\":[{\\\"address\\\":\\\"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa\\\",\\\"amount\\\":50000}],\\\"fee\\\":1000}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/signature",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"signature"
+							]
+						},
+						"description": "Sign a Bitcoin transaction with the specified inputs and outputs"
+					},
+					"response": []
+				},
+				{
+					"name": "Sign Tron Transaction",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/195'/0'/0/0\",\n    \"coinType\": 195,\n    \"payload\": \"{\\\"rawTxHex\\\": \\\"0a02db6d22084c8c1a2d1a2d1a2d\\\", \\\"tokenAddress\\\":\\\"TR7NHqjeKQxGTCi8q8ZY4pL8otSzgjLj6t\\\"}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/signature",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"signature"
+							]
+						},
+						"description": "Sign a Tron transaction with the specified raw transaction hex"
+					},
+					"response": []
+				}
+			],
+			"description": "Transaction signing endpoints for various cryptocurrencies"
+		},
+		{
+			"name": "Development Mode",
+			"item": [
+				{
+					"name": "Generate Ethereum Address (Dev Mode)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/60'/0'/0/0\",\n    \"coinType\": 60,\n    \"isDev\": true\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address"
+							]
+						},
+						"description": "Generate an Ethereum address in development mode (testnet)"
+					},
+					"response": []
+				},
+				{
+					"name": "Sign Ethereum Transaction (Dev Mode)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"path\": \"m/44'/60'/0'/0/0\",\n    \"coinType\": 60,\n    \"isDev\": true,\n    \"payload\": \"{\\\"nonce\\\":1,\\\"value\\\":1000000000000000000,\\\"gasLimit\\\":21000,\\\"gasPrice\\\":20000000000,\\\"to\\\":\\\"0x742d35Cc6634C0532925a3b8D359A5C5119e32C8\\\",\\\"data\\\":\\\"0x\\\",\\\"chainId\\\":5}\"\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/signature",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"signature"
+							]
+						},
+						"description": "Sign an Ethereum transaction in development mode (Goerli testnet, chainId: 5)"
+					},
+					"response": []
+				}
+			],
+			"description": "Development mode endpoints for testing with testnets"
+		},
+		{
+			"name": "Examples & Testing",
+			"item": [
+				{
+					"name": "Complete Workflow - Register & Generate Addresses",
+					"event": [
+						{
+							"listen": "prerequest",
+							"script": {
+								"exec": [
+									"// This is a demo script showing the complete workflow",
+									"console.log('Starting complete DQ Vault workflow demonstration');"
+								],
+								"type": "text/javascript"
+							}
+						},
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"// This would be a test that runs the complete workflow",
+									"pm.test(\"Complete workflow demo placeholder\", function () {",
+									"    pm.expect(true).to.be.true;",
+									"});",
+									"",
+									"console.log('Complete workflow steps:');",
+									"console.log('1. Register user with mnemonic');",
+									"console.log('2. Generate Bitcoin address');", 
+									"console.log('3. Generate Ethereum address');",
+									"console.log('4. Generate Solana address');",
+									"console.log('5. Sign example transactions');",
+									"console.log('Run individual requests to test each step.');"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/info",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"info"
+							]
+						},
+						"description": "This is a placeholder request that demonstrates the complete DQ Vault workflow. Check the test script for the full workflow steps."
+					},
+					"response": []
+				}
+			],
+			"description": "Examples and workflow demonstrations"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"id": "global-prerequest",
+				"type": "text/javascript",
+				"exec": [
+					"// Global pre-request script",
+					"console.log('DQ Vault API Request: ' + pm.request.url);",
+					"",
+					"// Ensure required environment variables are set",
+					"if (!pm.environment.get('vault_url')) {",
+					"    console.warn('Warning: vault_url environment variable not set');",
+					"}",
+					"if (!pm.environment.get('vault_token')) {",
+					"    console.warn('Warning: vault_token environment variable not set');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"id": "global-test",
+				"type": "text/javascript",
+				"exec": [
+					"// Global test script",
+					"pm.test(\"Response time is acceptable\", function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"pm.test(\"Content-Type is application/json\", function () {",
+					"    pm.expect(pm.response.headers.get('Content-Type')).to.include('application/json');",
+					"});",
+					"",
+					"// Log response for debugging",
+					"if (pm.response.code !== 200) {",
+					"    console.log('Response Status:', pm.response.status);",
+					"    console.log('Response Body:', pm.response.text());",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "collection_version",
+			"value": "1.0.0",
+			"type": "string"
+		},
+		{
+			"key": "api_version",
+			"value": "v1",
+			"type": "string"
+		}
+	]
+} 
