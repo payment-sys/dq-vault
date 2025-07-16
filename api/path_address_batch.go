@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"net/http"
 
@@ -14,39 +15,37 @@ import (
 	"github.com/payment-system/dq-vault/lib/slip44"
 )
 
-func (b *Backend) pathAddress(ctx context.Context, req *logical.Request,
+// pathAddressBatch generates a batch of addresses using a templated derivation path.
+func (b *Backend) pathAddressBatch(ctx context.Context, req *logical.Request,
 	d *framework.FieldData) (*logical.Response, error) {
-	backendLogger := b.logger.With(slog.String("op", "path_address"))
+	backendLogger := b.logger.With(slog.String("op", "path_address_batch"))
 	if err := helpers.ValidateFields(req, d); err != nil {
 		backendLogger.Error("validate fields", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	// UUID of user required to sign transaction
 	uuid := d.Get("uuid").(string)
-
-	// derivation path
-	derivationPath := d.Get("path").(string)
-
-	// coin type of transaction
-	// see supported coinTypes lib/bipp44coins
+	pathTemplate := d.Get("pathTemplate").(string)
 	coinType := d.Get("coinType").(int)
-
 	isDev := d.Get("isDev").(bool)
+	startIndex := d.Get("startIndex").(int)
+	count := d.Get("count").(int)
 
-	if uint16(coinType) == slip44.Bitshares {
-		derivationPath = config.BitsharesDerivationPath
+	if count <= 0 || count > 1000 {
+		return nil, logical.CodedError(http.StatusBadRequest, "count must be between 1 and 1000")
 	}
 
-	backendLogger.Info("request", "path", derivationPath, "cointype", coinType)
+	if uint16(coinType) == slip44.Bitshares {
+		pathTemplate = config.BitsharesDerivationPath
+	}
 
-	// validate data provided
-	if err := helpers.ValidateData(ctx, req, uuid, derivationPath); err != nil {
+	// Validate base data
+	if err := helpers.ValidateData(ctx, req, uuid, pathTemplate); err != nil {
 		backendLogger.Error("validate data", "error", err)
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	// path where user data is stored in vault
+	// Retrieve user info
 	path := config.StorageBasePath + uuid
 	entry, err := req.Storage.Get(ctx, path)
 	if err != nil {
@@ -54,7 +53,6 @@ func (b *Backend) pathAddress(ctx context.Context, req *logical.Request,
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	// obtain mnemonic and passphrase of user
 	var userInfo helpers.User
 	err = entry.DecodeJSON(&userInfo)
 	if err != nil {
@@ -68,21 +66,27 @@ func (b *Backend) pathAddress(ctx context.Context, req *logical.Request,
 		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
 	}
 
-	backendLogger.Info("dp", "dp", derivationPath)
-
-	// obtains blockchain adapater based on coinType
 	adapterInventory := adapter.GetInventory(backendLogger)
 
-	address, err := adapterInventory.DeriveAddress(seed, uint16(coinType), derivationPath, isDev)
-	if err != nil {
-		backendLogger.Error("derive address", "error", err)
-		return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
+	addresses := make(map[string]string, count)
+	for i := startIndex; i < startIndex+count; i++ {
+		var derivationPath string
+		if pathTemplate == config.BitsharesDerivationPath {
+			derivationPath = pathTemplate
+		} else {
+			derivationPath = fmt.Sprintf(pathTemplate, i)
+		}
+		address, err := adapterInventory.DeriveAddress(seed, uint16(coinType), derivationPath, isDev)
+		if err != nil {
+			backendLogger.Error("derive address", "error", err, "index", i)
+			return nil, logical.CodedError(http.StatusUnprocessableEntity, err.Error())
+		}
+		addresses[derivationPath] = address
 	}
 
-	// Returns publicKey and address as output
 	return &logical.Response{
 		Data: map[string]interface{}{
-			"address": address,
+			"addresses": addresses,
 		},
 	}, nil
 }

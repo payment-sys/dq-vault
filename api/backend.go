@@ -120,6 +120,44 @@ Returns randomly generated user UUID
 				},
 			},
 
+			// api/address/batch
+			{
+				Pattern:      "address/batch",
+				HelpSynopsis: "Generate a batch of addresses for a user",
+				HelpDescription: `
+
+Generates a batch of addresses from stored mnemonic and passphrase using a templated derivation path.
+(e.g., m/44'/60'/0'/0/%d).
+
+`,
+				Fields: map[string]*framework.FieldSchema{
+					"uuid": {
+						Type:        framework.TypeString,
+						Description: "UUID of user",
+					},
+					"pathTemplate": {
+						Type:        framework.TypeString,
+						Description: "Templated derivation path, e.g., m/44'/60'/0'/0/%d",
+					},
+					"coinType": {
+						Type:        framework.TypeInt,
+						Description: "Cointype of transaction",
+					},
+					"startIndex": {
+						Type:        framework.TypeInt,
+						Description: "Start index for address generation",
+						Default:     0,
+					},
+					"count": {
+						Type:        framework.TypeInt,
+						Description: "Number of addresses to generate",
+					},
+				},
+				Callbacks: map[logical.Operation]framework.OperationFunc{
+					logical.UpdateOperation: b.pathAddressBatch,
+				},
+			},
+
 			// api/info
 			{
 				Pattern:      "info",
