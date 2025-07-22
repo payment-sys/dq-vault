@@ -538,6 +538,64 @@
 						"description": "Generate a Bitshares (BTS) address using BIP-44 derivation path"
 					},
 					"response": []
+				},
+				{
+					"name": "Batch Generate Addresses",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"",
+									"pm.test(\"Response contains addresses object\", function () {",
+									"    const responseJson = pm.response.json();",
+									"    pm.expect(responseJson.data).to.have.property('addresses');",
+									"    pm.expect(responseJson.data.addresses).to.be.an('object');",
+									"    Object.values(responseJson.data.addresses).forEach(function(addr) {",
+									"        pm.expect(addr).to.be.a('string');",
+									"    });",
+									"});"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "X-Vault-Token",
+								"value": "{{vault_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"uuid\": \"{{user_uuid}}\",\n    \"coinType\": 0,\n    \"paths\": [\"m/44'/0'/0'/0/0\", \"m/44'/0'/0'/0/1\"]\n}"
+						},
+						"url": {
+							"raw": "{{vault_url}}/v1/dq/address/batch",
+							"host": [
+								"{{vault_url}}"
+							],
+							"path": [
+								"v1",
+								"dq",
+								"address",
+								"batch"
+							]
+						},
+						"description": "Batch generate addresses for a user by providing an array of derivation paths."
+					},
+					"response": []
 				}
 			],
 			"description": "Address generation endpoints for various cryptocurrencies"
